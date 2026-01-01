@@ -1,0 +1,16 @@
+{
+  "name": "SpendWise - Expense Tracker",
+  "short_name": "SpendWise",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0f0f12",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/5501/5501375.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

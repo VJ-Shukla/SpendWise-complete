@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <style>
+    /* =========================================
+       MASTER FIX: PROFESSIONAL MOBILE LAYOUT
+       ========================================= */
+
+    /* 1. GLOBAL SCROLL FIX */
+    html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden; 
+        overflow-y: auto !important; /* Allow scrolling down */
+    }
+
+    /* 2. LAPTOP RULES (PC Only) */
+    @media screen and (min-width: 900px) {
+        #menu-toggle { display: none !important; } /* Hide mobile button */
+        
+        .app-wrapper {
+            display: grid !important;
+            grid-template-columns: 260px 1fr 300px !important; /* 3 Columns: Sidebar - Main - Panel */
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar .right-panel-mobile {
+            display: none !important; /* Hide the sidebar version of panel on PC */
+        }
+    }
+
+    /* 3. MOBILE RULES (Phone Only) */
+    @media screen and (max-width: 899px) {
+        
+        /* A. MENU BUTTON: Fixed top-left corner */
+        #menu-toggle {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            position: fixed !important;
+            top: 15px;
+            left: 15px;
+            z-index: 50 !important; /* LOWER Z-INDEX than Sidebar */
+            background: rgba(13, 13, 13, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid #333;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+
+        /* B. LAYOUT: Single Block */
+        .app-wrapper {
+            display: block !important;
+            height: auto !important;
+            overflow-y: auto !important;
+        }
+
+        /* C. Main Content */
+        .main-content {
+            width: 100% !important;
+            padding: 80px 20px 40px 20px !important; /* Top padding for menu button */
+        }
+
+        /* D. SIDEBAR: The Container for Nav + Profile */
+        .sidebar {
+            position: fixed !important;
+            left: -100% !important;
+            top: 0;
+            width: 85% !important;
+            max-width: 320px;
+            height: 100vh;
+            z-index: 99999 !important; /* HIGHEST LAYER - Covers menu button */
+            background-color: #0a0a0a;
+            transition: 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            box-shadow: 5px 0 100px rgba(0,0,0,0.9);
+            overflow-y: auto;
+            padding-bottom: 40px;
+        }
+        .sidebar.active { left: 0 !important; }
+
+        /* E. RIGHT PANEL (Now inside Sidebar) */
+        .right-panel-mobile {
+            display: block !important;
+            padding: 20px 15px !important;
+            border-bottom: 1px solid #222;
+            margin-bottom: 10px;
+            background: rgba(255,255,255,0.02);
+        }
+
+        /* FIX: Increase Settings Icon Size */
+        .icon-btn-small i {
+            font-size: 1.4rem !important; 
+        }
+
+        /* F. Hide PC-only right column & duplicate headers */
+        .right-panel-pc, .header-right .icon-btn, .header-controls button:last-child {
+            display: none !important;
+        }
+
+        /* G. Stack Grids */
+        .cards-container, .summary-grid, .charts-grid {
+            display: grid !important;
+            grid-template-columns: 1fr !important;
+            gap: 15px !important;
+        }
+    }
+</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpendWise - Monthly Expense Tracker & Analyzer</title>
+    
+    <link rel="manifest" href="manifest.json">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="auth-wrapper" id="authWrapper">
+        <div class="split-screen-container">
+            
+            <div class="auth-left-column">
+                <div class="auth-container">
+                    <div class="auth-header">
+                        <img src="image.png" alt="SpendWise" class="brand-full-logo">
+                        <p>Monthly Expense Tracker & Analyzer</p>
+                    </div>
+
+                    <div class="auth-box active" id="login">
+                        <h2>Welcome Back</h2>
+                        <form id="loginForm">
+                            <div class="input-group">
+                                <i class="ri-user-line"></i>
+                                <input type="text" id="loginUsername" placeholder="Username" required>
+                            </div>
+                            <div class="input-group">
+                                <i class="ri-lock-2-line"></i>
+                                <input type="password" id="loginPassword" placeholder="Password" required>
+                            </div>
+                            <div class="auth-actions">
+                                <a href="#" onclick="openForgotPasswordModal()" class="forgot-link">Forgot Password?</a>
+                            </div>
+                            <button class="btn-primary full-width" id="loginBtn">Sign In</button>
+                        </form>
+                        <div class="auth-footer">
+                            <p>New here? <a href="#" onclick="showAuthTab('register')">Create Account</a></p>
+                        </div>
+                    </div>
+
+                    <div class="auth-box" id="register">
+                        <h2>Create Account</h2>
+                        <form id="registerForm">
+                            <div class="input-group">
+                                <i class="ri-user-add-line"></i>
+                                <input type="text" id="regUsername" placeholder="Username" required>
+                            </div>
+                            <div class="input-group">
+                                <i class="ri-mail-line"></i>
+                                <input type="email" id="regEmail" placeholder="Email Address" required>
+                            </div>
+                            <div class="input-group">
+                                <i class="ri-lock-2-line"></i>
+                                <input type="password" id="regPassword" placeholder="Password" required>
+                            </div>
+                            <div class="input-group">
+                                <i class="ri-shield-user-line"></i>
+                                <select id="userType" required>
+                                    <option value="student">Student Account</option>
+                                    <option value="individual">Individual Account</option>
+                                    <option value="business">Business Account</option>
+                                </select>
+                            </div>
+                            <button class="btn-primary full-width" id="registerBtn">Register</button>
+                        </form>
+                        <div class="auth-footer">
+                            <p>Already have an account? <a href="#" onclick="showAuthTab('login')">Login</a></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="auth-right-column">
+                <div class="hero-content">
+                    <h4 class="hero-brand">SpendWise</h4>
+                    <h1 class="hero-headline">Master your money,<br>design your future.</h1>
+                    <div class="hero-divider"></div>
+                    <p class="hero-description">
+                        Gain total control over your finances with intelligent monthly tracking and powerful analytics. 
+                        SpendWise helps you visualize spending habits, set smart budgets, and build a secure financial future.
+                    </p>
+                    <div class="hero-features">
+                        <div class="feature-tag"><i class="ri-pie-chart-2-line"></i> Smart Analytics</div>
+                        <div class="feature-tag"><i class="ri-shield-check-line"></i> Secure Data</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="app-wrapper" id="appWrapper" style="display: none;">
+        
+        <aside class="sidebar">
+            <div class="brand">
+                <img src="image.png" alt="SpendWise" class="sidebar-brand-logo">
+            </div>
+
+            <div class="right-panel-mobile">
+                <div class="profile-widget">
+                    <div class="profile-header">
+                        <div class="avatar-circle">
+                            <span id="avatarInitialsMobile">U</span>
+                        </div>
+                        <div class="profile-info">
+                            <h4 id="menuUsernameMobile">Loading...</h4>
+                            <span id="menuUserTypeBadgeMobile" class="badge">User</span>
+                        </div>
+                        <button class="icon-btn-small" onclick="openProfileModal()"><i class="ri-settings-3-line"></i></button>
+                    </div>
+                    <div class="email-display" id="menuUserEmailMobile">user@example.com</div>
+                </div>
+
+                <div class="panel-section">
+                    <h5>Quick Actions</h5>
+                    <div class="action-buttons">
+                        <button class="action-btn" onclick="showTab('add-expense')">
+                            <div class="icon-box expense"><i class="ri-subtract-line"></i></div>
+                            <span>Expense</span>
+                        </button>
+                        <button class="action-btn" onclick="showTab('add-income')">
+                            <div class="icon-box income"><i class="ri-add-line"></i></div>
+                            <span>Income</span>
+                        </button>
+                        <button class="action-btn" onclick="openCalendarModal()">
+                            <div class="icon-box calendar"><i class="ri-calendar-line"></i></div>
+                            <span>Calendar</span>
+                        </button>
+                        <button class="action-btn" onclick="openFeedbackModal()">
+                            <div class="icon-box feedback"><i class="ri-star-line"></i></div>
+                            <span>Feedback</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="panel-section" style="margin-top: 10px; text-align: center;">
+                    <button class="btn-link" onclick="openSupportModal()" style="font-size: 0.9rem; opacity: 0.7;">Contact Support</button>
+                </div>
+            </div>
+            <nav class="nav-menu">
+                <p class="nav-label">Main</p>
+                <a href="#" class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')">
+                    <i class="ri-dashboard-line"></i> <span>Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="analysis" onclick="showTab('analysis')">
+                    <i class="ri-pie-chart-2-line"></i> <span>Analytics</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="budget" onclick="showTab('budget')">
+                    <i class="ri-funds-box-line"></i> <span>Budgets</span>
+                </a>
+
+                <p class="nav-label">Finance</p>
+                <a href="#" class="nav-item" data-tab="add-income" onclick="showTab('add-income')">
+                    <i class="ri-arrow-up-circle-line"></i> <span>Income</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="add-expense" onclick="showTab('add-expense')">
+                    <i class="ri-arrow-down-circle-line"></i> <span>Expenses</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="recurring" onclick="showTab('recurring')">
+                    <i class="ri-loop-right-line"></i> <span>Subscriptions</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="emergency-fund" onclick="showTab('emergency-fund')">
+                    <i class="ri-shield-check-line"></i> <span>Emergency Fund</span>
+                </a>
+
+                <a href="#" class="nav-item" id="adminNavBtn" data-tab="admin-panel" onclick="showTab('admin-panel')" style="display: none; color: #ec4899;">
+                    <i class="ri-shield-keyhole-line"></i> <span>Admin Panel</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="#" class="nav-item logout" onclick="handleLogout()">
+                    <i class="ri-logout-box-r-line"></i> <span>Logout</span>
+                </a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <button id="menu-toggle">☰ Menu</button>
+            
+            <header class="top-header">
+                <div class="header-welcome">
+                    <h2 id="pageTitle">Dashboard</h2>
+                    <p id="currentDateDisplay">Loading date...</p>
+                </div>
+                
+                <div class="header-controls">
+                    <div class="month-picker" id="monthPickerContainer">
+                        <i class="ri-calendar-event-line"></i>
+                        <input type="month" id="dashboardMonthInput">
+                    </div>
+                    <button class="icon-btn mobile-menu-btn" onclick="toggleSidebar()"><i class="ri-menu-line"></i></button>
+                </div>
+            </header>
+
+            <div id="contentContainer">
+
+                <div class="view-section" id="admin-panel">
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header"><h4>System Overview</h4></div>
+        <div class="summary-grid" style="padding: 20px;">
+            <div class="card summary-card">
+                <div class="card-info">
+                    <span>Total Users</span>
+                    <h3 id="adminTotalUsers">0</h3>
+                </div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-info">
+                    <span>Total Volume</span>
+                    <h3 id="adminTotalVol">₹0</h3>
+                </div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-info">
+                    <span>Feedback Count</span>
+                    <h3 id="adminTotalFeed">0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section-grid">
+        <div class="card list-card">
+            <div class="card-header"><h4>User Database</h4></div>
+            <div class="scrollable-list" id="adminUserList" style="max-height: 400px; overflow-y: auto;">
+                 <p style="text-align:center; padding:20px; opacity:0.6;">Loading users...</p>
+            </div>
+        </div>
+
+        <div class="card list-card">
+            <div class="card-header"><h4>User Feedback</h4></div>
+            <div class="scrollable-list" id="adminFeedbackList" style="max-height: 400px; overflow-y: auto;">
+                 <p style="text-align:center; padding:20px; opacity:0.6;">No feedback yet.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+                            <div class="view-section" id="analysis">
+    <div class="card" style="margin-bottom: 20px;">
+         <div class="card-header">
+             <h4>Export Data</h4>
+             <div class="card-actions">
+                 <button class="btn-secondary small" onclick="downloadCSV()">
+                     <i class="ri-file-excel-line"></i> CSV
+                 </button>
+                 <button class="btn-secondary small" onclick="downloadPDF()">
+                     <i class="ri-file-pdf-line"></i> PDF
+                 </button>
+             </div>
+         </div>
+    </div>
+    
+    <div class="section-grid">
+        <div class="card">
+            <div class="card-header"><h4>Monthly Summary</h4></div>
+             <div style="padding: 20px;">
+                <div class="report-row">
+                    <span>Income</span>
+                    <span id="reportIncome" class="text-success">₹0</span>
+                </div>
+                <div class="report-row">
+                    <span>Expenses</span>
+                    <span id="reportExpenses" class="text-danger">₹0</span>
+                </div>
+                <div class="report-row highlight">
+                    <span>Net Savings</span>
+                    <span id="reportSavings">₹0</span>
+                </div>
+                <div class="report-row">
+                    <span>Savings Rate</span>
+                    <span id="reportRate">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h4>Category Breakdown</h4></div>
+            <div id="categoryAnalysis" style="padding: 20px;">
+                <p style="text-align:center; opacity:0.6;">Loading...</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="margin-top: 20px;">
+        <div class="card-header"><h4>6-Month Trend</h4></div>
+        <div id="trendAnalysis" style="padding: 20px;">
+             <p style="text-align:center; opacity:0.6;">Loading...</p>
+        </div>
+    </div>
+</div>
+                
+                <div class="view-section active" id="dashboard">
+                    <div class="summary-grid">
+                        <div class="card summary-card income">
+                            <div class="card-icon"><i class="ri-arrow-down-circle-line"></i></div>
+                            <div class="card-info">
+                                <span>Total Income</span>
+                                <h3 id="totalIncomeDisplay">₹0</h3>
+                            </div>
+                        </div>
+                        
+                        <div class="card summary-card expense">
+                            <div class="card-icon"><i class="ri-arrow-up-circle-line"></i></div>
+                            <div class="card-info">
+                                <span>Total Expenses</span>
+                                <h3 id="totalExpensesDisplay">₹0</h3>
+                            </div>
+                        </div>
+                        
+                        <div class="card summary-card balance">
+                            <div class="card-icon"><i class="ri-wallet-3-line"></i></div>
+                            <div class="card-info">
+                                <span>Net Savings</span>
+                                <h3 id="netSavingsDisplay">₹0</h3>
+                            </div>
+                            <div class="savings-badge" id="savingsRateDisplay">0%</div>
+                        </div>
+                    </div>
+
+                    <div class="charts-grid">
+                        <div class="card chart-card large">
+                            <div class="card-header">
+                                <h4>12-Month Trends</h4>
+                                <div class="card-actions">
+                                    <span class="dot income"></span> Income
+                                    <span class="dot expense"></span> Expense
+                                </div>
+                            </div>
+                            <div class="chart-wrapper">
+                                <canvas id="trendChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="card chart-card small">
+                            <div class="card-header">
+                                <h4>Spending Mix</h4>
+                            </div>
+                            <div class="chart-wrapper doughnut">
+                                <canvas id="categoryChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card table-card">
+                        <div class="card-header">
+                            <h4>Recent Transactions</h4>
+                            <button class="btn-text" onclick="showTab('add-expense')">View All</button>
+                        </div>
+                        <div class="transaction-list" id="recentTransactionsList">
+                            <div class="loading-state">Loading transactions...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="view-section" id="add-expense">
+                    <div class="section-grid">
+                        <div class="card form-card">
+                            <div class="card-header">
+                                <h4><i class="ri-add-circle-line"></i> Add New Expense</h4>
+                            </div>
+                            <form id="expenseForm">
+                                <div class="form-row">
+                                    <div class="input-group">
+                                        <label>Amount (₹)</label>
+                                        <input type="number" id="amount" placeholder="0.00" step="0.01" required>
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Date</label>
+                                        <input type="date" id="date" required>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="input-group">
+                                        <label>Category</label>
+                                        <select id="category" required>
+                                            <option value="">Select...</option>
+                                        </select>
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Payment Method</label>
+                                        <select id="paymentMethod">
+                                            <option value="cash">Cash</option>
+                                            <option value="card">Card</option>
+                                            <option value="upi">UPI</option>
+                                            <option value="netbanking">Net Banking</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label>Description</label>
+                                    <input type="text" id="description" placeholder="What was this for?">
+                                </div>
+                                <button type="button" class="btn-primary" id="addExpenseBtn">Save Transaction</button>
+                            </form>
+                        </div>
+
+                        <div class="card list-card">
+                            <div class="card-header">
+                                <h4>Expense History</h4>
+                            </div>
+                            <div class="scrollable-list" id="allExpensesList"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="view-section" id="add-income">
+                    <div class="section-grid">
+                        <div class="card form-card">
+                            <div class="card-header">
+                                <h4 id="incomeTitle"><i class="ri-add-circle-line"></i> Add Income</h4>
+                            </div>
+                            <form id="incomeForm">
+                                <div class="form-row">
+                                    <div class="input-group">
+                                        <label>Amount (₹)</label>
+                                        <input type="number" id="incomeAmount" placeholder="0.00" step="0.01" required>
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Date Received</label>
+                                        <input type="date" id="incomeDate" required>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label>Source</label>
+                                    <select id="incomeSource" required>
+                                        <option value="">Select Source...</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn-primary" id="addIncomeBtn">Save Income</button>
+                            </form>
+                        </div>
+                        <div class="card list-card">
+                            <div class="card-header">
+                                <h4>Income History</h4>
+                            </div>
+                            <div class="scrollable-list" id="recentIncomeList"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="view-section" id="budget">
+                     <div class="section-grid">
+                        <div class="card form-card">
+                            <div class="card-header">
+                                <h4>Set Monthly Budget</h4>
+                            </div>
+                            <form id="budgetForm">
+                                <div class="form-row">
+                                    <div class="input-group">
+                                        <label>Category</label>
+                                        <select id="budgetCategory" required></select>
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Amount (₹)</label>
+                                        <input type="number" id="budgetAmount" required>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label>Month</label>
+                                    <input type="month" id="budgetMonth" required>
+                                </div>
+                                <button type="button" class="btn-primary" id="setBudgetBtn">Set Budget</button>
+                            </form>
+                        </div>
+                        <div class="card">
+                            <div class="card-header"><h4>Budget vs Actual</h4></div>
+                            <div id="budgetAnalysisList" style="padding: 20px;"></div>
+                        </div>
+                     </div>
+                     <div class="card" style="margin-top: 20px;">
+                        <div class="card-header"><h4>Current Budgets</h4></div>
+                        <div id="currentBudgetsList" style="padding: 20px;"></div>
+                     </div>
+                </div>
+
+                <div class="view-section" id="recurring">
+                     <div class="section-grid">
+                        <div class="card form-card">
+                            <div class="card-header"><h4>Add Subscription</h4></div>
+                            <form id="recurringForm">
+                                <div class="form-row">
+                                    <div class="input-group"><label>Name</label><input type="text" id="recDescription" required></div>
+                                    <div class="input-group"><label>Amount</label><input type="number" id="recAmount" required></div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="input-group"><label>Category</label><select id="recCategory" required></select></div>
+                                    <div class="input-group"><label>Frequency</label><select id="recFrequency"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></div>
+                                </div>
+                                <div class="input-group"><label>Next Due</label><input type="date" id="recDate" required></div>
+                                <button type="button" class="btn-primary" onclick="addRecurringExpense()">Add Subscription</button>
+                            </form>
+                        </div>
+                        <div class="card list-card">
+                            <div class="card-header"><h4>Active Subscriptions</h4></div>
+                            <div class="scrollable-list" id="recurringList"></div>
+                        </div>
+                     </div>
+                </div>
+                
+                <div class="view-section" id="emergency-fund">
+          <div class="summary-grid">
+    <div class="card summary-card">
+        <div class="card-info">
+            <span>Current Fund</span>
+            <h3 id="fundDisplayCurrent">₹0</h3>
+        </div>
+    </div>
+
+    <div class="card summary-card">
+        <div class="card-info">
+            <span>Goal Target</span>
+            <h3 id="fundDisplayTarget">₹0</h3>
+        </div>
+    </div>
+
+    <div class="card summary-card">
+        <div class="card-info">
+            <span>Progress</span>
+            <h3 id="fundDisplayProgress">0%</h3>
+        </div>
+    </div>
+</div>
+                    <div class="card" style="margin-top: 20px; padding: 20px;">
+                        <div class="progress-container">
+                            <div class="progress-fill" id="fundProgressBar" style="width: 100%"></div>
+                        </div>
+                        <p id="fundProgressText" style="text-align: center; margin-top: 10px; opacity: 0.7;"></p>
+                    <div id="fund-status-container" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 10px; text-align: center;">
+    <h4 id="fund-alert-msg" style="margin-bottom: 10px; font-weight: bold; margin-top: 0;">Loading status...</h4>
+    
+    <p id="fund-goal-msg" style="color: #aaa; margin: 0; font-size: 0.9em;">Calculating timeline...</p>
+</div>
+                    <div class="card form-card" style="margin-top: 20px;">
+                        <div class="card-header"><h4>Update Goals</h4></div>
+                        <form id="emergencyFundForm">
+                             <div class="form-row">
+                                <div class="input-group"><label>Target (₹)</label><input type="number" id="targetAmount" required></div>
+                                <div class="input-group"><label>Current (₹)</label><input type="number" id="currentAmount" required></div>
+                             </div>
+                             <div class="form-row">
+                                <div class="input-group"><label>Alert Threshold</label><input type="number" id="alertThreshold" required></div>
+                                <div class="input-group"><label>Monthly Goal</label><input type="number" id="monthlyGoal" required></div>
+                             </div>
+                             <button type="button" class="btn-primary" id="setEmergencyFundBtn">Update Goals</button>
+                        </form>
+                    </div>
+                </div>
+        </main>
+
+        <aside class="right-panel right-panel-pc">
+            <div class="profile-widget">
+                <div class="profile-header">
+                    <div class="avatar-circle">
+                        <span id="avatarInitials">U</span>
+                    </div>
+                    <div class="profile-info">
+                        <h4 id="menuUsername">Loading...</h4>
+                        <span id="menuUserTypeBadge" class="badge">User</span>
+                    </div>
+                    <button class="icon-btn-small" onclick="openProfileModal()"><i class="ri-settings-3-line"></i></button>
+                </div>
+                <div class="email-display" id="menuUserEmail">user@example.com</div>
+            </div>
+
+            <div class="panel-section">
+                <h5>Quick Actions</h5>
+                <div class="action-buttons">
+                    <button class="action-btn" onclick="showTab('add-expense')">
+                        <div class="icon-box expense"><i class="ri-subtract-line"></i></div>
+                        <span>Expense</span>
+                    </button>
+                    <button class="action-btn" onclick="showTab('add-income')">
+                        <div class="icon-box income"><i class="ri-add-line"></i></div>
+                        <span>Income</span>
+                    </button>
+                    <button class="action-btn" onclick="openCalendarModal()">
+                        <div class="icon-box calendar"><i class="ri-calendar-line"></i></div>
+                        <span>Calendar</span>
+                    </button>
+                    <button class="action-btn" onclick="openFeedbackModal()">
+                        <div class="icon-box feedback"><i class="ri-star-line"></i></div>
+                        <span>Feedback</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h5>Smart Insights</h5>
+                <div id="userTypeInsights" class="insights-container">
+                    <div class="insight-card">
+                        <i class="ri-loader-4-line ri-spin"></i> <span>Analyzing finances...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel-section">
+                <div class="card-header">
+                    <button class="btn-link" onclick="openSupportModal()">Contact</button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <div id="calendarModal" class="modal">
+        <div class="modal-content large">
+            <span class="close-modal" onclick="closeCalendarModal()">&times;</span>
+            <div class="calendar-controls">
+                <h3>Expense Calendar</h3>
+                <div class="date-selects">
+                    <select id="calendarMonth" onchange="renderCalendar()"><option value="0">Jan</option><option value="1">Feb</option><option value="2">Mar</option><option value="3">Apr</option><option value="4">May</option><option value="5">Jun</option><option value="6">Jul</option><option value="7">Aug</option><option value="8">Sep</option><option value="9">Oct</option><option value="10">Nov</option><option value="11">Dec</option></select>
+                    <input type="number" id="calendarYear" value="2025" onchange="renderCalendar()">
+                </div>
+            </div>
+            <div id="calendarGrid" class="calendar-grid"></div>
+            <div id="calendarDetails" class="calendar-details"></div>
+        </div>
+    </div>
+
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeProfileModal()">&times;</span>
+            <h3>Profile Settings</h3>
+            <form id="profileForm">
+                <div class="input-group"><label>Username</label><input type="text" id="profileUsername" required></div>
+                <div class="input-group"><label>Email</label><input type="email" id="profileEmail" required></div>
+                <div class="input-group"><label>Type</label><select id="profileUserType" required><option value="student">Student</option><option value="individual">Individual</option><option value="business">Business</option></select></div>
+                <button class="btn-primary full-width" type="button" onclick="updateProfile()">Save Changes</button>
+            </form>
+            <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+            <h4>Change Password</h4>
+            <div class="input-group"><input type="password" id="currentPassword" placeholder="Current Password"></div>
+            <div class="input-group"><input type="password" id="newPassword" placeholder="New Password"></div>
+            <button class="btn-secondary full-width" type="button" onclick="changePassword()">Update Password</button>
+        </div>
+    </div>
+    
+    <div id="feedbackModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeFeedbackModal()">&times;</span>
+            <h3>Feedback</h3>
+            <div class="star-rating">
+                <input type="radio" name="rating" id="star5" value="5"><label for="star5">★</label>
+                <input type="radio" name="rating" id="star4" value="4"><label for="star4">★</label>
+                <input type="radio" name="rating" id="star3" value="3"><label for="star3">★</label>
+                <input type="radio" name="rating" id="star2" value="2"><label for="star2">★</label>
+                <input type="radio" name="rating" id="star1" value="1"><label for="star1">★</label>
+            </div>
+            <div class="input-group"><textarea id="feedbackMessage" rows="4" placeholder="Your thoughts..."></textarea></div>
+            <button class="btn-primary full-width" type="button" onclick="submitFeedback()">Submit</button>
+        </div>
+    </div>
+
+    <div id="supportModal" class="modal">
+        <div class="modal-content large">
+            <span class="close-modal" onclick="closeSupportModal()">&times;</span>
+            <h3 style="text-align: center; margin-bottom: 30px;">Contact</h3>
+            <div class="support-grid" style="display: flex; justify-content: center; gap: 40px; margin-bottom: 30px;">
+                <div style="text-align: center;">
+                    <div style="width: 60px; height: 60px; background: rgba(16, 185, 129, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px;">
+                        <i class="ri-mail-send-line" style="font-size: 1.8rem; color: #10b981;"></i>
+                    </div>
+                    <h5 style="margin-bottom: 5px;">Email Us</h5>
+                    <p style="color: #9ca3af; font-size: 0.9rem;">shuklavijay773@gmail.com</p>
+                </div>
+                <div style="text-align: center;">
+                    <div style="width: 60px; height: 60px; background: rgba(59, 130, 246, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px;">
+                        <i class="ri-phone-line" style="font-size: 1.8rem; color: #3b82f6;"></i>
+                    </div>
+                    <h5 style="margin-bottom: 5px;">Call Us</h5>
+                    <p style="color: #9ca3af; font-size: 0.9rem;">+91 8828272664</p>
+                </div>
+            </div>
+            <div style="text-align: center; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                <p style="font-size: 0.8rem; color: #6b7280;">Available Mon-Fri, 9am - 6pm</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="forgotPasswordModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeForgotPasswordModal()">&times;</span>
+            <h3>Reset Password</h3>
+            <div id="forgotStep1">
+                <p style="margin-bottom: 15px; opacity: 0.7;">Enter your email to receive a reset link.</p>
+                <div class="input-group"><input type="email" id="forgotEmail" placeholder="Email Address"></div>
+                <button class="btn-primary full-width" type="button" onclick="requestResetLink()">Send Link</button>
+            </div>
+            <div id="forgotStep2" style="display:none; text-align: center;">
+                <i class="ri-mail-check-line" style="font-size: 3rem; color: var(--success);"></i>
+                <p>Link sent! Check your inbox.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+
+            <h3>New Password</h3>
+            <div class="input-group"><input type="password" id="finalNewPassword" placeholder="Enter new password"></div>
+            <button class="btn-primary full-width" type="button" onclick="submitNewPassword()">Update</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+import csv
+import io
+from flask import send_file, make_response
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from flask import Blueprint, request, jsonify, current_app
+from models import db, User, Expense, Income, Budget, RecurringExpense, EmergencyFund, Feedback
+from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import func
+from extensions import mail  # Import mail engine
+from flask_mail import Message
+import jwt
+import datetime
+from functools import wraps
+
+
+main = Blueprint('main', __name__)
+
+# ==========================================
+# 1. SECURITY & UTILS
+# ==========================================
+
+# Helper to send email without crashing if it fails
+def send_async_email(subject, recipient, body):
+    try:
+        msg = Message(subject, recipients=[recipient])
+        msg.body = body
+        mail.send(msg)
+    except Exception as e:
+        print(f"Email Error: {e}")
+
+# Decorator to protect routes
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(" ")[1]
+        
+        if not token:
+            return jsonify({'error': 'Token is missing!'}), 401
+        
+        try:
+            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
+            current_user = User.query.filter_by(id=data['user_id']).first()
+        except:
+            return jsonify({'error': 'Token is invalid!'}), 401
+            
+        return f(current_user, *args, **kwargs)
+    return decorated
+
+# ==========================================
+# 2. AUTHENTICATION & REGISTRATION
+# ==========================================
+
+@main.route('/api/auth/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    
+    if User.query.filter_by(username=data.get('username')).first():
+        return jsonify({'error': 'Username already exists'}), 400
+    if User.query.filter_by(email=data.get('email')).first():
+        return jsonify({'error': 'Email already exists'}), 400
+
+    hashed_password = generate_password_hash(data.get('password'), method='pbkdf2:sha256')
+    
+    new_user = User(
+        username=data.get('username'),
+        email=data.get('email'),
+        password_hash=hashed_password,
+        user_type=data.get('user_type', 'individual')
+    )
+    
+    fund = EmergencyFund(user=new_user)
+    
+    db.session.add(new_user)
+    db.session.add(fund)
+    db.session.commit()
+    
+    # [EMAIL TRIGGER 1] Welcome Email
+    send_async_email(
+        "Welcome to SpendWise", 
+        new_user.email, 
+        f"Hi {new_user.username},\n\nWelcome to SpendWise! Your account has been successfully created.\nStart tracking your expenses today!"
+    )
+    
+    return jsonify({'message': 'User created successfully'}), 201
+
+@main.route('/api/auth/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    user = User.query.filter_by(username=data.get('username')).first()
+    
+    if not user or not check_password_hash(user.password_hash, data.get('password')):
+        return jsonify({'error': 'Invalid username or password'}), 401
+        
+    token = jwt.encode({
+        'user_id': user.id,
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    }, current_app.config['SECRET_KEY'], algorithm="HS256")
+    
+    return jsonify({
+        'message': 'Login successful',
+        'access_token': token,
+        'username': user.username,
+        'email': user.email,
+        'user_type': user.user_type,
+        'is_admin': user.is_admin
+    })
+
+# ==========================================
+# 3. PASSWORD RESET (SMTP)
+# ==========================================
+
+@main.route('/api/auth/forgot-password', methods=['POST'])
+def forgot_password():
+    data = request.get_json()
+    email = data.get('email')
+    user = User.query.filter_by(email=email).first()
+    
+    if user:
+        token = jwt.encode({
+            'user_id': user.id,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
+        }, current_app.config['SECRET_KEY'], algorithm="HS256")
+        
+        # Determine URL (Local vs Prod)
+       # ... inside forgot_password function ...
+
+        # Determine URL (Local vs Prod)
+        if 'render' in request.host:
+            # When you eventually deploy to Render/Netlify
+            base_url = "https://your-frontend-app.netlify.app" 
+        else:
+            # === PASTE YOUR EXACT LOCAL URL HERE ===
+            base_url = "http://127.0.0.1:5500/spendwise-frontend/index.html" 
+            
+        link = f"{base_url}?reset_token={token}"
+        
+        # ... rest of the code ...
+        
+        # [EMAIL TRIGGER 2] Reset Link
+        send_async_email(
+            "SpendWise Password Reset", 
+            email, 
+            f"Hi {user.username},\n\nClick the link below to reset your password:\n{link}\n\nThis link expires in 15 minutes."
+        )
+
+    return jsonify({'message': 'If registered, you will receive a reset link.'})
+
+@main.route('/api/auth/reset-password', methods=['POST'])
+def reset_password():
+    data = request.get_json()
+    try:
+        payload = jwt.decode(data.get('token'), current_app.config['SECRET_KEY'], algorithms=["HS256"])
+        user = User.query.filter_by(id=payload['user_id']).first()
+        if user:
+            user.password_hash = generate_password_hash(data.get('new_password'), method='pbkdf2:sha256')
+            db.session.commit()
+            
+            # [EMAIL TRIGGER] Confirmation
+            send_async_email(
+                "Password Changed Successfully", 
+                user.email, 
+                "Your SpendWise password has been reset successfully."
+            )
+            
+            return jsonify({'message': 'Password reset successful'})
+        return jsonify({'error': 'User not found'}), 404
+    except:
+        return jsonify({'error': 'Invalid or expired token'}), 400
+
+# ==========================================
+# 4. DASHBOARD & DATA
+# ==========================================
+
+@main.route('/api/dashboard', methods=['GET'])
+@token_required
+def get_dashboard(current_user):
+    month_str = request.args.get('month', datetime.datetime.now().strftime('%Y-%m'))
+    
+    total_income = db.session.query(func.sum(Income.amount)).filter(Income.user_id == current_user.id, Income.date.like(f'{month_str}%')).scalar() or 0
+    total_expenses = db.session.query(func.sum(Expense.amount)).filter(Expense.user_id == current_user.id, Expense.date.like(f'{month_str}%')).scalar() or 0
+    
+    recent = Expense.query.filter_by(user_id=current_user.id).order_by(Expense.date.desc()).limit(5).all()
+    recent_data = [{'id': e.id, 'category': e.category, 'amount': e.amount, 'date': e.date, 'description': e.description} for e in recent]
+    
+    cat_query = db.session.query(Expense.category, func.sum(Expense.amount)).filter(Expense.user_id == current_user.id, Expense.date.like(f'{month_str}%')).group_by(Expense.category).all()
+    category_data = [{'category': c[0], 'amount': c[1], 'percentage': round((c[1]/total_expenses*100),1)} for c in cat_query] if total_expenses > 0 else []
+
+    return jsonify({
+        'total_income': total_income,
+        'total_expenses': total_expenses,
+        'net_savings': total_income - total_expenses,
+        'savings_rate': ((total_income - total_expenses) / total_income * 100) if total_income > 0 else 0,
+        'recent_transactions': recent_data,
+        'category_expenses': category_data
+    })
+
+@main.route('/api/analytics/monthly', methods=['GET'])
+@token_required
+def get_monthly_trends(current_user):
+    # 1. Get Data from DB
+    incomes = db.session.query(func.substr(Income.date, 1, 7).label('month'), func.sum(Income.amount)).filter_by(user_id=current_user.id).group_by('month').all()
+    expenses = db.session.query(func.substr(Expense.date, 1, 7).label('month'), func.sum(Expense.amount)).filter_by(user_id=current_user.id).group_by('month').all()
+    
+    # 2. Convert DB data to Dictionary
+    data_map = {}
+    all_months = set()
+    
+    for i in incomes: 
+        data_map[i[0]] = {'month': i[0], 'income': i[1], 'expenses': 0}
+        all_months.add(i[0])
+        
+    for e in expenses:
+        if e[0] not in data_map: data_map[e[0]] = {'month': e[0], 'income': 0, 'expenses': 0}
+        data_map[e[0]]['expenses'] = e[1]
+        all_months.add(e[0])
+
+    # 3. Smart Date Logic (Fill empty months)
+    # If no data, start from Today. If data exists (even future), start from the latest data point.
+    if not all_months:
+        latest_date = datetime.date.today()
+    else:
+        # Find the latest month in your data (e.g., "2025-12")
+        sorted_months = sorted(list(all_months))
+        latest_str = sorted_months[-1]
+        # Robust parsing for YYYY-MM
+        year, month = map(int, latest_str.split('-'))
+        latest_date = datetime.date(year, month, 1)
+        
+        # If your data is old, make sure we at least show up to today
+        today = datetime.date.today()
+        if latest_date < datetime.date(today.year, today.month, 1):
+            latest_date = today
+
+    # 4. Generate the last 12 months backwards from the latest date
+    final_result = []
+    curr_year = latest_date.year
+    curr_month = latest_date.month
+    
+    for _ in range(12):
+        key = f"{curr_year}-{curr_month:02d}"
+        
+        if key in data_map:
+            final_result.append(data_map[key])
+        else:
+            final_result.append({'month': key, 'income': 0, 'expenses': 0})
+            
+        # Move back one month
+        curr_month -= 1
+        if curr_month == 0:
+            curr_month = 12
+            curr_year -= 1
+
+    # 5. Return sorted chronologically (Oldest -> Newest)
+    return jsonify(final_result[::-1])
+
+# ==========================================
+# 5. TRANSACTIONS & BUDGETS
+# ==========================================
+
+@main.route('/api/expenses', methods=['GET', 'POST'])
+@token_required
+def handle_expenses(current_user):
+    if request.method == 'POST':
+        data = request.get_json()
+        db.session.add(Expense(amount=data['amount'], category=data['category'], date=data['date'], payment_method=data.get('payment_method'), description=data.get('description'), user_id=current_user.id))
+        db.session.commit()
+        return jsonify({'message': 'Expense added'}), 201
+    exps = Expense.query.filter_by(user_id=current_user.id).order_by(Expense.date.desc()).all()
+    return jsonify([{'id': e.id, 'amount': e.amount, 'category': e.category, 'date': e.date, 'description': e.description} for e in exps])
+
+@main.route('/api/expenses/<int:id>', methods=['DELETE'])
+@token_required
+def delete_expense(current_user, id):
+    exp = Expense.query.filter_by(id=id, user_id=current_user.id).first()
+    if exp: db.session.delete(exp); db.session.commit()
+    return jsonify({'message': 'Deleted'})
+
+@main.route('/api/income', methods=['GET', 'POST'])
+@token_required
+def handle_income(current_user):
+    if request.method == 'POST':
+        data = request.get_json()
+        db.session.add(Income(amount=data['amount'], source=data['source'], date=data['date'], user_id=current_user.id))
+        db.session.commit()
+        return jsonify({'message': 'Income added'}), 201
+    incs = Income.query.filter_by(user_id=current_user.id).order_by(Income.date.desc()).all()
+    return jsonify([{'id': i.id, 'amount': i.amount, 'source': i.source, 'date': i.date} for i in incs])
+
+@main.route('/api/budget', methods=['GET', 'POST'])
+@token_required
+def handle_budget(current_user):
+    if request.method == 'POST':
+        data = request.get_json()
+        existing = Budget.query.filter_by(user_id=current_user.id, category=data['category'], month=data['month']).first()
+        if existing: existing.amount = data['amount']
+        else: db.session.add(Budget(category=data['category'], amount=data['amount'], month=data['month'], user_id=current_user.id))
+        db.session.commit()
+        return jsonify({'message': 'Budget set'}), 201
+    month = request.args.get('month', datetime.datetime.now().strftime('%Y-%m'))
+    buds = Budget.query.filter_by(user_id=current_user.id, month=month).all()
+    return jsonify([{'category': b.category, 'amount': b.amount, 'month': b.month} for b in buds])
+
+@main.route('/api/budget-analysis', methods=['GET'])
+@token_required
+def budget_analysis(current_user):
+    month = request.args.get('month', datetime.datetime.now().strftime('%Y-%m'))
+    budgets = Budget.query.filter_by(user_id=current_user.id, month=month).all()
+    analysis = []
+    for b in budgets:
+        spent = db.session.query(func.sum(Expense.amount)).filter(Expense.user_id == current_user.id, Expense.category == b.category, Expense.date.like(f'{month}%')).scalar() or 0
+        analysis.append({'category': b.category, 'budgeted': b.amount, 'actual': spent, 'status': 'over' if spent > b.amount else 'under'})
+    return jsonify(analysis)
+
+@main.route('/api/recurring', methods=['GET', 'POST', 'DELETE'])
+@main.route('/api/recurring/<int:id>', methods=['DELETE'])
+@token_required
+def handle_recurring(current_user, id=None):
+    if request.method == 'POST':
+        data = request.get_json()
+        db.session.add(RecurringExpense(description=data['description'], amount=data['amount'], category=data['category'], frequency=data['frequency'], next_due_date=data['next_due_date'], user_id=current_user.id))
+        db.session.commit(); return jsonify({'message': 'Added'}), 201
+    if request.method == 'DELETE':
+        rec = RecurringExpense.query.filter_by(id=id, user_id=current_user.id).first()
+        if rec: db.session.delete(rec); db.session.commit()
+        return jsonify({'message': 'Deleted'})
+    recs = RecurringExpense.query.filter_by(user_id=current_user.id).all()
+    return jsonify([{'id': r.id, 'description': r.description, 'amount': r.amount, 'next_due_date': r.next_due_date, 'frequency': r.frequency} for r in recs])
+
+# ==========================================
+# 6. EMERGENCY FUND & PROFILE
+# ==========================================
+
+@main.route('/api/emergency-fund', methods=['GET', 'PUT'])
+@token_required
+def handle_fund(current_user):
+    fund = EmergencyFund.query.filter_by(user_id=current_user.id).first()
+    if not fund: fund = EmergencyFund(user_id=current_user.id); db.session.add(fund); db.session.commit()
+    if request.method == 'PUT':
+        data = request.get_json()
+        for k, v in data.items(): setattr(fund, k, v)
+        db.session.commit(); return jsonify({'message': 'Fund updated'})
+    return jsonify({'target_amount': fund.target_amount, 'current_amount': fund.current_amount, 'alert_threshold': fund.alert_threshold, 'monthly_goal': fund.monthly_goal, 'progress_percentage': round((fund.current_amount/fund.target_amount*100), 1) if fund.target_amount > 0 else 0})
+
+@main.route('/api/user/profile', methods=['PUT'])
+@token_required
+def update_profile(current_user):
+    data = request.get_json()
+    if 'username' in data: current_user.username = data['username']
+    if 'email' in data: current_user.email = data['email']
+    if 'user_type' in data: current_user.user_type = data['user_type']
+    db.session.commit(); return jsonify({'message': 'Profile updated'})
+
+@main.route('/api/user/password', methods=['PUT'])
+@token_required
+def update_password(current_user):
+    data = request.get_json()
+    if not check_password_hash(current_user.password_hash, data['current_password']): return jsonify({'error': 'Incorrect current password'}), 401
+    
+    current_user.password_hash = generate_password_hash(data['new_password'], method='pbkdf2:sha256')
+    db.session.commit()
+    
+    # [EMAIL TRIGGER 3] Password Change Alert
+    send_async_email(
+        "Security Alert: Password Changed", 
+        current_user.email, 
+        f"Hi {current_user.username},\n\nYour password was just changed. If this wasn't you, please contact support immediately."
+    )
+    
+    return jsonify({'message': 'Password updated'})
+
+# ==========================================
+# 7. ADMIN & FEEDBACK
+# ==========================================
+
+@main.route('/api/feedback', methods=['POST'])
+@token_required
+def submit_feedback(current_user):
+    data = request.get_json()
+    db.session.add(Feedback(user_username=current_user.username, rating=data['rating'], message=data['message']))
+    db.session.commit(); return jsonify({'message': 'Feedback received'})
+
+@main.route('/api/admin/stats', methods=['GET'])
+@token_required
+def admin_stats(current_user):
+    if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
+    return jsonify({'total_users': User.query.count(), 'total_volume': db.session.query(func.sum(Expense.amount)).scalar() or 0, 'total_feedback': Feedback.query.count()})
+
+@main.route('/api/admin/users', methods=['GET'])
+@token_required
+def admin_users(current_user):
+    if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
+    return jsonify([{'username': u.username, 'email': u.email, 'user_type': u.user_type, 'joined': u.joined_at.strftime('%Y-%m-%d'), 'is_admin': u.is_admin} for u in User.query.limit(20).all()])
+
+@main.route('/api/admin/feedback', methods=['GET'])
+@token_required
+def admin_feedback(current_user):
+    if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
+    return jsonify([{'user': f.user_username, 'rating': f.rating, 'message': f.message, 'date': f.date.strftime('%Y-%m-%d')} for f in Feedback.query.order_by(Feedback.date.desc()).limit(20).all()])
+# ==========================================
+# EXPORT DATA (CSV & PDF)
+# ==========================================
+@main.route('/api/export/<format_type>', methods=['GET'])
+@token_required
+def export_data(current_user, format_type):
+    try:
+        incomes = Income.query.filter_by(user_id=current_user.id).all()
+        expenses = Expense.query.filter_by(user_id=current_user.id).all()
+
+        if format_type == 'csv':
+            si = io.StringIO()
+            cw = csv.writer(si)
+            cw.writerow(['Type', 'Category', 'Amount', 'Date'])
+            for i in incomes: cw.writerow(['Income', i.source, i.amount, i.date])
+            for e in expenses: cw.writerow(['Expense', e.category, e.amount, e.date])
+            
+            output = make_response(si.getvalue())
+            output.headers["Content-Disposition"] = "attachment; filename=report.csv"
+            output.headers["Content-type"] = "text/csv"
+            return output
+
+        elif format_type == 'pdf':
+            buffer = io.BytesIO()
+            p = canvas.Canvas(buffer, pagesize=letter)
+            y = 750
+            p.setFont("Helvetica-Bold", 16)
+            p.drawString(50, y, f"SpendWise Report - {current_user.username}")
+            y -= 30
+            p.setFont("Helvetica", 10)
+            
+            p.drawString(50, y, "EXPENSES:")
+            y -= 20
+            for e in expenses:
+                p.drawString(50, y, f"{e.date} | {e.category} | Rs.{e.amount}")
+                y -= 15
+                if y < 50: p.showPage(); y = 750
+            
+            p.save()
+            buffer.seek(0)
+            return send_file(buffer, as_attachment=True, download_name='report.pdf', mimetype='application/pdf')
+            
+    except Exception as e:
+        print(e)
+        return jsonify({'error': 'Export failed'}), 500
