@@ -12,6 +12,7 @@ from flask_mail import Message
 import jwt
 import datetime
 from functools import wraps
+from threading import Thread  # <--- Add this new import
 
 
 main = Blueprint('main', __name__)
@@ -20,14 +21,22 @@ main = Blueprint('main', __name__)
 # 1. SECURITY & UTILS
 # ==========================================
 
-# Helper to send email without crashing if it fails
+# Helper to send email in a background thread (PREVENTS TIMEOUTS)
 def send_async_email(subject, recipient, body):
-    try:
-        msg = Message(subject, recipients=[recipient])
-        msg.body = body
-        mail.send(msg)
-    except Exception as e:
-        print(f"Email Error: {e}")
+    app = current_app._get_current_object()  # Get the active Flask app
+    msg = Message(subject, recipients=[recipient])
+    msg.body = body
+    
+    # Create a separate thread so the main app doesn't wait
+    thr = Thread(target=send_email_thread, args=(app, msg))
+    thr.start()
+
+def send_email_thread(app, msg):
+    with app.app_context():
+        try:
+            mail.send(msg)
+        except Exception as e:
+            print(f"Email Error: {e}")
 
 # Decorator to protect routes
 def token_required(f):
