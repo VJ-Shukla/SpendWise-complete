@@ -11,7 +11,8 @@ def create_app():
     app.config.from_object(Config)
     
     # 2. Enable CORS (Allows Frontend to talk to Backend)
-    CORS(app)
+    # UPDATED: This specific setting fixes the "Preflight" error by allowing all origins
+    CORS(app, resources={r"/*": {"origins": "*"}})
     
     # 3. Initialize Extensions
     db.init_app(app)
