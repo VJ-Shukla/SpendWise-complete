@@ -55,7 +55,7 @@ def token_required(f):
 # 2. AUTHENTICATION & REGISTRATION
 # ==========================================
 
-@main.route('/api/auth/register', methods=['POST'])
+@main.route('/auth/register', methods=['POST'])
 def register():
     data = request.get_json()
     
@@ -88,7 +88,7 @@ def register():
     
     return jsonify({'message': 'User created successfully'}), 201
 
-@main.route('/api/auth/login', methods=['POST'])
+@main.route('/auth/login', methods=['POST'])
 def login():
     data = request.get_json()
     user = User.query.filter_by(username=data.get('username')).first()
@@ -114,7 +114,7 @@ def login():
 # 3. PASSWORD RESET (SMTP)
 # ==========================================
 
-@main.route('/api/auth/forgot-password', methods=['POST'])
+@main.route('/auth/forgot-password', methods=['POST'])
 def forgot_password():
     data = request.get_json()
     email = data.get('email')
@@ -127,19 +127,13 @@ def forgot_password():
         }, current_app.config['SECRET_KEY'], algorithm="HS256")
         
         # Determine URL (Local vs Prod)
-       # ... inside forgot_password function ...
-
-        # Determine URL (Local vs Prod)
         if 'render' in request.host:
-            # When you eventually deploy to Render/Netlify
-            base_url = "https://your-frontend-app.netlify.app" 
+            # Update this to your ACTUAL Vercel frontend URL
+            base_url = "https://spend-wise-complete-nt0la99xb-vijays-projects-4630bcf5.vercel.app" 
         else:
-            # === PASTE YOUR EXACT LOCAL URL HERE ===
             base_url = "http://127.0.0.1:5500/spendwise-frontend/index.html" 
             
         link = f"{base_url}?reset_token={token}"
-        
-        # ... rest of the code ...
         
         # [EMAIL TRIGGER 2] Reset Link
         send_async_email(
@@ -150,7 +144,7 @@ def forgot_password():
 
     return jsonify({'message': 'If registered, you will receive a reset link.'})
 
-@main.route('/api/auth/reset-password', methods=['POST'])
+@main.route('/auth/reset-password', methods=['POST'])
 def reset_password():
     data = request.get_json()
     try:
@@ -176,7 +170,7 @@ def reset_password():
 # 4. DASHBOARD & DATA
 # ==========================================
 
-@main.route('/api/dashboard', methods=['GET'])
+@main.route('/dashboard', methods=['GET'])
 @token_required
 def get_dashboard(current_user):
     month_str = request.args.get('month', datetime.datetime.now().strftime('%Y-%m'))
@@ -199,7 +193,7 @@ def get_dashboard(current_user):
         'category_expenses': category_data
     })
 
-@main.route('/api/analytics/monthly', methods=['GET'])
+@main.route('/analytics/monthly', methods=['GET'])
 @token_required
 def get_monthly_trends(current_user):
     # 1. Get Data from DB
@@ -220,18 +214,14 @@ def get_monthly_trends(current_user):
         all_months.add(e[0])
 
     # 3. Smart Date Logic (Fill empty months)
-    # If no data, start from Today. If data exists (even future), start from the latest data point.
     if not all_months:
         latest_date = datetime.date.today()
     else:
-        # Find the latest month in your data (e.g., "2025-12")
         sorted_months = sorted(list(all_months))
         latest_str = sorted_months[-1]
-        # Robust parsing for YYYY-MM
         year, month = map(int, latest_str.split('-'))
         latest_date = datetime.date(year, month, 1)
         
-        # If your data is old, make sure we at least show up to today
         today = datetime.date.today()
         if latest_date < datetime.date(today.year, today.month, 1):
             latest_date = today
@@ -249,7 +239,6 @@ def get_monthly_trends(current_user):
         else:
             final_result.append({'month': key, 'income': 0, 'expenses': 0})
             
-        # Move back one month
         curr_month -= 1
         if curr_month == 0:
             curr_month = 12
@@ -262,7 +251,7 @@ def get_monthly_trends(current_user):
 # 5. TRANSACTIONS & BUDGETS
 # ==========================================
 
-@main.route('/api/expenses', methods=['GET', 'POST'])
+@main.route('/expenses', methods=['GET', 'POST'])
 @token_required
 def handle_expenses(current_user):
     if request.method == 'POST':
@@ -273,14 +262,14 @@ def handle_expenses(current_user):
     exps = Expense.query.filter_by(user_id=current_user.id).order_by(Expense.date.desc()).all()
     return jsonify([{'id': e.id, 'amount': e.amount, 'category': e.category, 'date': e.date, 'description': e.description} for e in exps])
 
-@main.route('/api/expenses/<int:id>', methods=['DELETE'])
+@main.route('/expenses/<int:id>', methods=['DELETE'])
 @token_required
 def delete_expense(current_user, id):
     exp = Expense.query.filter_by(id=id, user_id=current_user.id).first()
     if exp: db.session.delete(exp); db.session.commit()
     return jsonify({'message': 'Deleted'})
 
-@main.route('/api/income', methods=['GET', 'POST'])
+@main.route('/income', methods=['GET', 'POST'])
 @token_required
 def handle_income(current_user):
     if request.method == 'POST':
@@ -291,7 +280,7 @@ def handle_income(current_user):
     incs = Income.query.filter_by(user_id=current_user.id).order_by(Income.date.desc()).all()
     return jsonify([{'id': i.id, 'amount': i.amount, 'source': i.source, 'date': i.date} for i in incs])
 
-@main.route('/api/budget', methods=['GET', 'POST'])
+@main.route('/budget', methods=['GET', 'POST'])
 @token_required
 def handle_budget(current_user):
     if request.method == 'POST':
@@ -305,7 +294,7 @@ def handle_budget(current_user):
     buds = Budget.query.filter_by(user_id=current_user.id, month=month).all()
     return jsonify([{'category': b.category, 'amount': b.amount, 'month': b.month} for b in buds])
 
-@main.route('/api/budget-analysis', methods=['GET'])
+@main.route('/budget-analysis', methods=['GET'])
 @token_required
 def budget_analysis(current_user):
     month = request.args.get('month', datetime.datetime.now().strftime('%Y-%m'))
@@ -316,8 +305,8 @@ def budget_analysis(current_user):
         analysis.append({'category': b.category, 'budgeted': b.amount, 'actual': spent, 'status': 'over' if spent > b.amount else 'under'})
     return jsonify(analysis)
 
-@main.route('/api/recurring', methods=['GET', 'POST', 'DELETE'])
-@main.route('/api/recurring/<int:id>', methods=['DELETE'])
+@main.route('/recurring', methods=['GET', 'POST', 'DELETE'])
+@main.route('/recurring/<int:id>', methods=['DELETE'])
 @token_required
 def handle_recurring(current_user, id=None):
     if request.method == 'POST':
@@ -335,7 +324,7 @@ def handle_recurring(current_user, id=None):
 # 6. EMERGENCY FUND & PROFILE
 # ==========================================
 
-@main.route('/api/emergency-fund', methods=['GET', 'PUT'])
+@main.route('/emergency-fund', methods=['GET', 'PUT'])
 @token_required
 def handle_fund(current_user):
     fund = EmergencyFund.query.filter_by(user_id=current_user.id).first()
@@ -346,7 +335,7 @@ def handle_fund(current_user):
         db.session.commit(); return jsonify({'message': 'Fund updated'})
     return jsonify({'target_amount': fund.target_amount, 'current_amount': fund.current_amount, 'alert_threshold': fund.alert_threshold, 'monthly_goal': fund.monthly_goal, 'progress_percentage': round((fund.current_amount/fund.target_amount*100), 1) if fund.target_amount > 0 else 0})
 
-@main.route('/api/user/profile', methods=['PUT'])
+@main.route('/user/profile', methods=['PUT'])
 @token_required
 def update_profile(current_user):
     data = request.get_json()
@@ -355,7 +344,7 @@ def update_profile(current_user):
     if 'user_type' in data: current_user.user_type = data['user_type']
     db.session.commit(); return jsonify({'message': 'Profile updated'})
 
-@main.route('/api/user/password', methods=['PUT'])
+@main.route('/user/password', methods=['PUT'])
 @token_required
 def update_password(current_user):
     data = request.get_json()
@@ -377,26 +366,26 @@ def update_password(current_user):
 # 7. ADMIN & FEEDBACK
 # ==========================================
 
-@main.route('/api/feedback', methods=['POST'])
+@main.route('/feedback', methods=['POST'])
 @token_required
 def submit_feedback(current_user):
     data = request.get_json()
     db.session.add(Feedback(user_username=current_user.username, rating=data['rating'], message=data['message']))
     db.session.commit(); return jsonify({'message': 'Feedback received'})
 
-@main.route('/api/admin/stats', methods=['GET'])
+@main.route('/admin/stats', methods=['GET'])
 @token_required
 def admin_stats(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
     return jsonify({'total_users': User.query.count(), 'total_volume': db.session.query(func.sum(Expense.amount)).scalar() or 0, 'total_feedback': Feedback.query.count()})
 
-@main.route('/api/admin/users', methods=['GET'])
+@main.route('/admin/users', methods=['GET'])
 @token_required
 def admin_users(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
     return jsonify([{'username': u.username, 'email': u.email, 'user_type': u.user_type, 'joined': u.joined_at.strftime('%Y-%m-%d'), 'is_admin': u.is_admin} for u in User.query.limit(20).all()])
 
-@main.route('/api/admin/feedback', methods=['GET'])
+@main.route('/admin/feedback', methods=['GET'])
 @token_required
 def admin_feedback(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
@@ -404,7 +393,7 @@ def admin_feedback(current_user):
 # ==========================================
 # EXPORT DATA (CSV & PDF)
 # ==========================================
-@main.route('/api/export/<format_type>', methods=['GET'])
+@main.route('/export/<format_type>', methods=['GET'])
 @token_required
 def export_data(current_user, format_type):
     try:
