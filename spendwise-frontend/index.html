@@ -282,6 +282,9 @@
                 <a href="#" class="nav-item" data-tab="emergency-fund" onclick="showTab('emergency-fund')">
                     <i class="ri-shield-check-line"></i> <span>Emergency Fund</span>
                 </a>
+                <a href="#" class="nav-item" data-tab="overall-summary" onclick="showTab('overall-summary')">
+                    <i class="ri-bar-chart-grouped-line"></i> <span>Overall Summary</span>
+                </a>
 
                 <a href="#" class="nav-item" id="adminNavBtn" data-tab="admin-panel" onclick="showTab('admin-panel')" style="display: none; color: #ec4899;">
                     <i class="ri-shield-keyhole-line"></i> <span>Admin Panel</span>
@@ -316,100 +319,100 @@
             <div id="contentContainer">
 
                 <div class="view-section" id="admin-panel">
-    <div class="card" style="margin-bottom: 24px;">
-        <div class="card-header"><h4>System Overview</h4></div>
-        <div class="summary-grid" style="padding: 20px;">
-            <div class="card summary-card">
-                <div class="card-info">
-                    <span>Total Users</span>
-                    <h3 id="adminTotalUsers">0</h3>
-                </div>
-            </div>
-            <div class="card summary-card">
-                <div class="card-info">
-                    <span>Total Volume</span>
-                    <h3 id="adminTotalVol">₹0</h3>
-                </div>
-            </div>
-            <div class="card summary-card">
-                <div class="card-info">
-                    <span>Feedback Count</span>
-                    <h3 id="adminTotalFeed">0</h3>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="section-grid">
-        <div class="card list-card">
-            <div class="card-header"><h4>User Database</h4></div>
-            <div class="scrollable-list" id="adminUserList" style="max-height: 400px; overflow-y: auto;">
-                 <p style="text-align:center; padding:20px; opacity:0.6;">Loading users...</p>
-            </div>
-        </div>
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header"><h4>System Overview</h4></div>
+                        <div class="summary-grid" style="padding: 20px;">
+                            <div class="card summary-card">
+                                <div class="card-info">
+                                    <span>Total Users</span>
+                                    <h3 id="adminTotalUsers">0</h3>
+                                </div>
+                            </div>
+                            <div class="card summary-card">
+                                <div class="card-info">
+                                    <span>Total Volume</span>
+                                    <h3 id="adminTotalVol">₹0</h3>
+                                </div>
+                            </div>
+                            <div class="card summary-card">
+                                <div class="card-info">
+                                    <span>Feedback Count</span>
+                                    <h3 id="adminTotalFeed">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="section-grid">
+                        <div class="card list-card">
+                            <div class="card-header"><h4>User Database</h4></div>
+                            <div class="scrollable-list" id="adminUserList" style="max-height: 400px; overflow-y: auto;">
+                                 <p style="text-align:center; padding:20px; opacity:0.6;">Loading users...</p>
+                            </div>
+                        </div>
 
-        <div class="card list-card">
-            <div class="card-header"><h4>User Feedback</h4></div>
-            <div class="scrollable-list" id="adminFeedbackList" style="max-height: 400px; overflow-y: auto;">
-                 <p style="text-align:center; padding:20px; opacity:0.6;">No feedback yet.</p>
-            </div>
-        </div>
-    </div>
-</div>
+                        <div class="card list-card">
+                            <div class="card-header"><h4>User Feedback</h4></div>
+                            <div class="scrollable-list" id="adminFeedbackList" style="max-height: 400px; overflow-y: auto;">
+                                 <p style="text-align:center; padding:20px; opacity:0.6;">No feedback yet.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                            <div class="view-section" id="analysis">
-    <div class="card" style="margin-bottom: 20px;">
-         <div class="card-header">
-             <h4>Export Data</h4>
-             <div class="card-actions">
-                 <button class="btn-secondary small" onclick="downloadCSV()">
-                     <i class="ri-file-excel-line"></i> CSV
-                 </button>
-                 <button class="btn-secondary small" onclick="downloadPDF()">
-                     <i class="ri-file-pdf-line"></i> PDF
-                 </button>
-             </div>
-         </div>
-    </div>
-    
-    <div class="section-grid">
-        <div class="card">
-            <div class="card-header"><h4>Monthly Summary</h4></div>
-             <div style="padding: 20px;">
-                <div class="report-row">
-                    <span>Income</span>
-                    <span id="reportIncome" class="text-success">₹0</span>
-                </div>
-                <div class="report-row">
-                    <span>Expenses</span>
-                    <span id="reportExpenses" class="text-danger">₹0</span>
-                </div>
-                <div class="report-row highlight">
-                    <span>Net Savings</span>
-                    <span id="reportSavings">₹0</span>
-                </div>
-                <div class="report-row">
-                    <span>Savings Rate</span>
-                    <span id="reportRate">0%</span>
-                </div>
-            </div>
-        </div>
+                <div class="view-section" id="analysis">
+                    <div class="card" style="margin-bottom: 20px;">
+                         <div class="card-header">
+                             <h4>Export Data</h4>
+                             <div class="card-actions">
+                                 <button class="btn-secondary small" onclick="downloadCSV()">
+                                     <i class="ri-file-excel-line"></i> CSV
+                                 </button>
+                                 <button class="btn-secondary small" onclick="downloadPDF()">
+                                     <i class="ri-file-pdf-line"></i> PDF
+                                 </button>
+                             </div>
+                         </div>
+                    </div>
+                    
+                    <div class="section-grid">
+                        <div class="card">
+                            <div class="card-header"><h4>Monthly Summary</h4></div>
+                             <div style="padding: 20px;">
+                                <div class="report-row">
+                                    <span>Income</span>
+                                    <span id="reportIncome" class="text-success">₹0</span>
+                                </div>
+                                <div class="report-row">
+                                    <span>Expenses</span>
+                                    <span id="reportExpenses" class="text-danger">₹0</span>
+                                </div>
+                                <div class="report-row highlight">
+                                    <span>Net Savings</span>
+                                    <span id="reportSavings">₹0</span>
+                                </div>
+                                <div class="report-row">
+                                    <span>Savings Rate</span>
+                                    <span id="reportRate">0%</span>
+                                </div>
+                            </div>
+                        </div>
 
-        <div class="card">
-            <div class="card-header"><h4>Category Breakdown</h4></div>
-            <div id="categoryAnalysis" style="padding: 20px;">
-                <p style="text-align:center; opacity:0.6;">Loading...</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="card" style="margin-top: 20px;">
-        <div class="card-header"><h4>6-Month Trend</h4></div>
-        <div id="trendAnalysis" style="padding: 20px;">
-             <p style="text-align:center; opacity:0.6;">Loading...</p>
-        </div>
-    </div>
-</div>
+                        <div class="card">
+                            <div class="card-header"><h4>Category Breakdown</h4></div>
+                            <div id="categoryAnalysis" style="padding: 20px;">
+                                <p style="text-align:center; opacity:0.6;">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card" style="margin-top: 20px;">
+                        <div class="card-header"><h4>6-Month Trend</h4></div>
+                        <div id="trendAnalysis" style="padding: 20px;">
+                             <p style="text-align:center; opacity:0.6;">Loading...</p>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="view-section active" id="dashboard">
                     <div class="summary-grid">
@@ -620,38 +623,35 @@
                 </div>
                 
                 <div class="view-section" id="emergency-fund">
-          <div class="summary-grid">
-    <div class="card summary-card">
-        <div class="card-info">
-            <span>Current Fund</span>
-            <h3 id="fundDisplayCurrent">₹0</h3>
-        </div>
-    </div>
-
-    <div class="card summary-card">
-        <div class="card-info">
-            <span>Goal Target</span>
-            <h3 id="fundDisplayTarget">₹0</h3>
-        </div>
-    </div>
-
-    <div class="card summary-card">
-        <div class="card-info">
-            <span>Progress</span>
-            <h3 id="fundDisplayProgress">0%</h3>
-        </div>
-    </div>
-</div>
+                    <div class="summary-grid">
+                        <div class="card summary-card">
+                            <div class="card-info">
+                                <span>Current Fund</span>
+                                <h3 id="fundDisplayCurrent">₹0</h3>
+                            </div>
+                        </div>
+                        <div class="card summary-card">
+                            <div class="card-info">
+                                <span>Goal Target</span>
+                                <h3 id="fundDisplayTarget">₹0</h3>
+                            </div>
+                        </div>
+                        <div class="card summary-card">
+                            <div class="card-info">
+                                <span>Progress</span>
+                                <h3 id="fundDisplayProgress">0%</h3>
+                            </div>
+                        </div>
+                    </div>
                     <div class="card" style="margin-top: 20px; padding: 20px;">
                         <div class="progress-container">
                             <div class="progress-fill" id="fundProgressBar" style="width: 100%"></div>
                         </div>
                         <p id="fundProgressText" style="text-align: center; margin-top: 10px; opacity: 0.7;"></p>
                     <div id="fund-status-container" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 10px; text-align: center;">
-    <h4 id="fund-alert-msg" style="margin-bottom: 10px; font-weight: bold; margin-top: 0;">Loading status...</h4>
-    
-    <p id="fund-goal-msg" style="color: #aaa; margin: 0; font-size: 0.9em;">Calculating timeline...</p>
-</div>
+                        <h4 id="fund-alert-msg" style="margin-bottom: 10px; font-weight: bold; margin-top: 0;">Loading status...</h4>
+                        <p id="fund-goal-msg" style="color: #aaa; margin: 0; font-size: 0.9em;">Calculating timeline...</p>
+                    </div>
                     <div class="card form-card" style="margin-top: 20px;">
                         <div class="card-header"><h4>Update Goals</h4></div>
                         <form id="emergencyFundForm">
@@ -667,7 +667,77 @@
                         </form>
                     </div>
                 </div>
-        </main>
+                </div>
+
+                <div class="view-section" id="overall-summary">
+                    <div class="summary-grid">
+                        <div class="card summary-card">
+                            <div class="card-info">
+                                <span>Lifetime Income</span>
+                                <h3 id="lifeIncome" class="text-success">₹0</h3>
+                            </div>
+                        </div>
+                        <div class="card summary-card">
+                            <div class="card-info">
+                                <span>Lifetime Spent</span>
+                                <h3 id="lifeExpense" class="text-danger">₹0</h3>
+                            </div>
+                        </div>
+                        <div class="card summary-card">
+                            <div class="card-info">
+                                <span>Lifetime Savings</span>
+                                <h3 id="lifeSavings">₹0</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-grid">
+                        <div style="display: flex; flex-direction: column; gap: 24px;">
+                            <div class="card chart-card">
+                                <div class="card-header">
+                                    <h4>Spending Trend (All Time)</h4>
+                                </div>
+                                <div class="chart-wrapper">
+                                    <canvas id="overallTrendChart"></canvas>
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-header"><h4>Period Comparison</h4></div>
+                                <div style="padding: 24px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                                        <div style="text-align: center;">
+                                            <span style="font-size: 0.9rem; color: var(--text-muted);" id="compPrevLabel">Dec 03</span>
+                                            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 5px;" id="compPrevVal">₹0</div>
+                                        </div>
+                                        <div style="display: flex; align-items: center; color: var(--text-muted);">
+                                            <i class="ri-arrow-right-line" style="font-size: 1.5rem;"></i>
+                                        </div>
+                                        <div style="text-align: center;">
+                                            <span style="font-size: 0.9rem; color: var(--primary);" id="compCurrLabel">Jan 03</span>
+                                            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 5px; color: var(--primary);" id="compCurrVal">₹0</div>
+                                        </div>
+                                    </div>
+                                    <div id="compInsight" style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; font-size: 0.9rem; text-align: center; color: var(--text-muted);">
+                                        Loading comparison...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h4>Top Categories (Lifetime)</h4>
+                            </div>
+                            <div class="chart-wrapper doughnut" style="height: 200px; margin-bottom: 20px;">
+                                <canvas id="overallPieChart"></canvas>
+                            </div>
+                            <div id="overallCategoryList" style="padding: 0 20px 20px 20px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div> </main>
 
         <aside class="right-panel right-panel-pc">
             <div class="profile-widget">
@@ -816,7 +886,6 @@
     
     <div id="resetPasswordModal" class="modal">
         <div class="modal-content">
-
             <h3>New Password</h3>
             <div class="input-group"><input type="password" id="finalNewPassword" placeholder="Enter new password"></div>
             <button class="btn-primary full-width" type="button" onclick="submitNewPassword()">Update</button>
