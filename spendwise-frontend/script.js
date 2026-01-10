@@ -5,14 +5,14 @@
     // ==========================================
     
     const getApiBase = () => {
-    // Check if the frontend is running on your laptop
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        return 'http://127.0.0.1:5000'; 
-    } else {
-        // Otherwise, use the live Render backend
-        return 'https://spendwise-backend-7ul1.onrender.com';
-    }
-};
+        // Check if the frontend is running on your laptop
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return 'http://127.0.0.1:5000'; 
+        } else {
+            // Otherwise, use the live Render backend
+            return 'https://spendwise-backend-7ul1.onrender.com';
+        }
+    };
     const CONFIG = {
         API_BASE: getApiBase(),
     };
@@ -40,6 +40,10 @@
 
     let categoryChartInstance = null;
     let trendChartInstance = null;
+    
+    // NEW: Instances for Overall Summary
+    let overallTrendInstance = null;
+    let overallPieInstance = null;
 
     // ==========================================
     // NOTIFICATION SYSTEM
@@ -214,7 +218,6 @@
              if(window.innerWidth > 900) appWrapper.style.display = 'grid';
              else appWrapper.style.display = 'block';
 
-             // === THE FIX: Populate Mobile Profile Data ===
              if(document.getElementById('menuUsernameMobile')) {
                  document.getElementById('menuUsernameMobile').textContent = currentUser;
                  document.getElementById('menuUserEmailMobile').textContent = currentEmail;
@@ -229,7 +232,6 @@
              }
         }
         
-        // Populate Desktop/Original Profile Data
         if(document.getElementById('menuUsername')) document.getElementById('menuUsername').textContent = currentUser;
         if(document.getElementById('menuUserEmail')) document.getElementById('menuUserEmail').textContent = currentEmail;
         if(document.getElementById('avatarInitials')) document.getElementById('avatarInitials').textContent = currentUser ? currentUser.charAt(0).toUpperCase() : 'U';
@@ -258,7 +260,6 @@
         const authWrapper = document.getElementById('authWrapper');
         const appWrapper = document.getElementById('appWrapper');
         
-        // FIX: Force hide the dashboard when logged out using !important
         if (appWrapper) appWrapper.style.setProperty('display', 'none', 'important');
         
         if (authWrapper) {
@@ -274,7 +275,7 @@
         if(target) target.classList.add('active');
     };
 
-  window.showTab = function(tabName) {
+    window.showTab = function(tabName) {
         // 1. Security Check
         if (!currentToken && tabName !== 'login' && tabName !== 'register') {
             showLoginUI(); return;
@@ -296,28 +297,44 @@
         if(navItem) navItem.classList.add('active');
         
         // 5. Update Page Title
-        const titleMap = { 'dashboard': 'Dashboard', 'add-income': 'Income', 'add-expense': 'Expenses', 'budget': 'Budgets', 'analysis': 'Analytics', 'recurring': 'Subscriptions', 'emergency-fund': 'Emergency Fund', 'admin-panel': 'Admin Dashboard' };
+        const titleMap = { 
+            'dashboard': 'Dashboard', 
+            'add-income': 'Income', 
+            'add-expense': 'Expenses', 
+            'budget': 'Budgets', 
+            'analysis': 'Analytics', 
+            'recurring': 'Subscriptions', 
+            'emergency-fund': 'Emergency Fund', 
+            'overall-summary': 'Lifetime Summary',
+            'admin-panel': 'Admin Dashboard' 
+        };
         const pageTitle = document.getElementById('pageTitle');
         if(pageTitle) pageTitle.textContent = titleMap[tabName] || 'SpendWise';
 
-        // === THE FIX: Toggle Month Picker Visibility ===
+        // 6. Toggle Month Picker Visibility
         const picker = document.getElementById('monthPickerContainer');
         if(picker) {
-            // Only show flex if tab is dashboard, otherwise hide
-            picker.style.display = (tabName === 'dashboard') ? 'flex' : 'none';
+            picker.style.display = (tabName === 'dashboard' || tabName === 'analysis' || tabName === 'budget') ? 'flex' : 'none';
         }
 
-        // 6. Load Data for Specific Tab
+        // 7. Load Data for Specific Tab
+        const mInput = document.getElementById('dashboardMonthInput');
+        const currentMonth = mInput ? mInput.value : null;
+
         if (tabName === 'dashboard') { 
-            const mInput = document.getElementById('dashboardMonthInput');
-            loadDashboard(mInput ? mInput.value : null); 
+            loadDashboard(currentMonth); 
+        }
+        else if (tabName === 'analysis') {
+             loadAnalysis(); 
+        }
+        else if (tabName === 'budget') {
+            loadBudgets(); 
         }
         else if (tabName === 'add-expense') loadExpenses();
-        else if (tabName === 'analysis') loadAnalysis();
         else if (tabName === 'add-income') loadRecentIncome();
-        else if (tabName === 'budget') loadBudgets();
         else if (tabName === 'emergency-fund') loadEmergencyFund();
         else if (tabName === 'recurring') loadRecurringExpenses();
+        else if (tabName === 'overall-summary') loadOverallSummary();
         else if (tabName === 'admin-panel') loadAdminData();
     };
 
@@ -358,7 +375,6 @@
             
             const list = document.getElementById('recentTransactionsList');
             if(list) {
-                // FIXED XSS HERE
                 list.innerHTML = d.recent_transactions.map(tr => `
                     <div class="transaction-item">
                         <div class="t-icon"><i class="${getCategoryIcon(tr.category, currentUserType)}"></i></div>
@@ -371,18 +387,13 @@
                 `).join('') || '<div style="padding:20px; text-align:center; opacity:0.6;">No recent transactions</div>';
             }
 
-            // Populate smart insights for both Desktop and Mobile panels
             const insightsHTML = (d.savings_rate < 0) ? `<div class="insight-card"><i class="ri-alarm-warning-line"></i> <div><strong>Overspending</strong><br><span style="opacity:0.7">Expenses > Income</span></div></div>` :
                                  (d.savings_rate < 20) ? `<div class="insight-card"><i class="ri-funds-line"></i> <div><strong>Low Savings</strong><br><span style="opacity:0.7">Aim for 20%</span></div></div>` :
                                  `<div class="insight-card"><i class="ri-thumb-up-line"></i> <div><strong>Healthy</strong><br><span style="opacity:0.7">Good savings rate!</span></div></div>`;
 
-            // Update desktop panel
             const insights = document.getElementById('userTypeInsights');
             if(insights) insights.innerHTML = insightsHTML;
 
-            // Update mobile panel if exists (since we copied HTML, IDs might duplicate. Ideally use class, but HTML copy is safer for now)
-            // A better approach in HTML would be to use classes, but since we have duplicate IDs for the mobile view hack:
-            // Let's rely on the fact that the mobile view is visible.
         } catch (error) {
             console.error("Dashboard Error:", error);
             showNotification("Failed to load dashboard data", "danger");
@@ -402,7 +413,6 @@
             categoryChartInstance = new Chart(ctxCat, {
                 type: 'doughnut',
                 data: {
-                    // Safe, as chart.js handles label rendering
                     labels: categoryData.map(c => c.category),
                     datasets: [{
                         data: categoryData.map(c => c.amount),
@@ -450,11 +460,11 @@
             });
         }
     }
-async function loadAdminData() {
+
+    async function loadAdminData() {
         if (!currentToken) return;
         
         try {
-            // 1. Get Stats
             const resStats = await fetch(`${CONFIG.API_BASE}/admin/stats`, { 
                 headers: {'Authorization': `Bearer ${currentToken}`} 
             });
@@ -466,12 +476,10 @@ async function loadAdminData() {
 
             const stats = await resStats.json();
             
-            // 2. Update Boxes
             document.getElementById('adminTotalUsers').textContent = stats.total_users || 0;
             document.getElementById('adminTotalVol').textContent = `₹${formatCompactNumber(stats.total_volume || 0)}`;
             document.getElementById('adminTotalFeed').textContent = stats.total_feedback || 0;
             
-            // 3. Get Users List
             const resUsers = await fetch(`${CONFIG.API_BASE}/admin/users`, { 
                 headers: {'Authorization': `Bearer ${currentToken}`} 
             });
@@ -490,7 +498,6 @@ async function loadAdminData() {
                 `).join('') || '<p style="text-align:center; padding:20px;">No users found.</p>';
             }
 
-            // 4. Get Feedback List
             const resFeed = await fetch(`${CONFIG.API_BASE}/admin/feedback`, { 
                 headers: {'Authorization': `Bearer ${currentToken}`} 
             });
@@ -519,7 +526,6 @@ async function loadAdminData() {
         const data = await res.json();
         const list = document.getElementById('allExpensesList');
         if(list) {
-            // FIXED XSS HERE
             list.innerHTML = data.map(e => `
                 <div class="transaction-item">
                     <div class="t-info"><div class="t-title">${escapeHtml(e.category)}</div><div class="t-meta">${e.date} • ${escapeHtml(e.description)}</div></div>
@@ -543,7 +549,6 @@ async function loadAdminData() {
         document.getElementById('expenseForm').reset();
         loadExpenses();
         
-        // === THE FIX: Refresh Calendar if it is open ===
         if(document.getElementById('calendarModal').style.display === 'block') {
             await fetchAllExpensesForCalendar();
             renderCalendar();
@@ -558,7 +563,6 @@ async function loadAdminData() {
             if(document.getElementById('dashboard').classList.contains('active')) loadDashboard();
             showNotification('Deleted', 'success');
             
-            // === THE FIX: Refresh Calendar if it is open ===
             if(document.getElementById('calendarModal').style.display === 'block') {
                 await fetchAllExpensesForCalendar();
                 renderCalendar();
@@ -580,7 +584,6 @@ async function loadAdminData() {
         const data = await res.json();
         const list = document.getElementById('recentIncomeList');
         if(list) {
-            // FIXED XSS HERE
             list.innerHTML = data.map(i => `
                 <div class="transaction-item">
                     <div class="t-info"><div class="t-title">${escapeHtml(i.source)}</div><div class="t-meta">${i.date}</div></div>
@@ -591,7 +594,12 @@ async function loadAdminData() {
     }
 
     async function loadBudgets() {
-        const m = document.getElementById('budgetMonth')?.value || new Date().toISOString().slice(0, 7);
+        const picker = document.getElementById('dashboardMonthInput');
+        const m = picker ? picker.value : new Date().toISOString().slice(0, 7);
+
+        const budgetFormInput = document.getElementById('budgetMonth');
+        if(budgetFormInput) budgetFormInput.value = m;
+
         const [bRes, aRes] = await Promise.all([
             fetch(`${CONFIG.API_BASE}/budget?month=${m}`, { headers: {'Authorization': `Bearer ${currentToken}`} }),
             fetch(`${CONFIG.API_BASE}/budget-analysis?month=${m}`, { headers: {'Authorization': `Bearer ${currentToken}`} })
@@ -601,13 +609,11 @@ async function loadAdminData() {
         
         const bList = document.getElementById('currentBudgetsList');
         if(bList) {
-            // FIXED XSS HERE
             bList.innerHTML = budgets.map(b => `<div style="display:flex; justify-content:space-between; padding:12px; border-bottom:1px solid var(--border-color);"><span><i class="${getCategoryIcon(b.category, currentUserType)}" style="margin-right:8px"></i>${escapeHtml(getCategoryLabel(b.category, currentUserType))}</span><span style="color:#10b981;">₹${formatCompactNumber(b.amount)}</span></div>`).join('') || '<div style="padding:15px; opacity:0.6;">No budgets set</div>';
         }
         
         const aList = document.getElementById('budgetAnalysisList');
         if(aList) {
-            // FIXED XSS HERE
             aList.innerHTML = analysis.map(b => {
                 const pct = Math.min((b.actual/b.budgeted*100), 100);
                 const col = b.status === 'over' ? '#ef4444' : '#10b981';
@@ -629,7 +635,6 @@ async function loadAdminData() {
         const data = await res.json();
         const list = document.getElementById('recurringList');
         if(list) {
-            // FIXED XSS HERE
             list.innerHTML = data.map(r => `
                 <div class="transaction-item">
                     <div class="t-info"><div class="t-title">${escapeHtml(r.description)}</div><div class="t-meta">Due: ${r.next_due_date} • ${r.frequency}</div></div>
@@ -640,7 +645,6 @@ async function loadAdminData() {
         }
     }
 
-    // Exported for onclick
     window.addRecurringExpense = async function() {
         const d = document.getElementById('recDescription').value;
         const a = document.getElementById('recAmount').value;
@@ -651,7 +655,6 @@ async function loadAdminData() {
         showNotification('Added', 'success'); loadRecurringExpenses();
     };
 
-    // Exported for onclick
     window.deleteRecurring = async function(id) {
         if(confirm('Stop?')) {
             await fetch(`${CONFIG.API_BASE}/recurring/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${currentToken}`} });
@@ -661,8 +664,6 @@ async function loadAdminData() {
     };
 
   async function loadEmergencyFund() {
-    console.log("Starting loadEmergencyFund...");
-
     try {
         const res = await fetch(`${getApiBase()}/emergency-fund`, {
             headers: { 'Authorization': `Bearer ${currentToken}` }
@@ -671,48 +672,34 @@ async function loadAdminData() {
         if (!res.ok) return;
 
         const data = await res.json();
-        console.log("Fund Data:", data);
-
-        // =========================================================
-        // 1. UPDATE TOP CARDS (Using the New IDs)
-        // =========================================================
-        // Current Fund
+        
+        // 1. UPDATE TOP CARDS
         const currentEl = document.getElementById('fundDisplayCurrent');
         if(currentEl) currentEl.innerText = `₹${data.current_amount.toLocaleString()}`;
 
-        // Goal Target
         const targetEl = document.getElementById('fundDisplayTarget');
         if(targetEl) targetEl.innerText = `₹${data.target_amount.toLocaleString()}`;
 
-        // Progress Text (Top Card)
         const progressEl = document.getElementById('fundDisplayProgress');
         if(progressEl) progressEl.innerText = `${data.progress_percentage}%`;
 
-        // =========================================================
         // 2. UPDATE PROGRESS BARS & INPUTS
-        // =========================================================
-        // Progress Ring Text (if you have a circle chart)
         const ringText = document.querySelector('.progress-ring-text');
         if(ringText) ringText.innerText = `${data.progress_percentage}%`;
 
-        // Linear Progress Bar (The blue line)
         const bar = document.getElementById('fundProgressBar');
         if(bar) bar.style.width = `${data.progress_percentage}%`;
 
-        // Form Inputs (The text boxes at bottom)
         if(document.getElementById('targetAmount')) document.getElementById('targetAmount').value = data.target_amount;
         if(document.getElementById('currentAmount')) document.getElementById('currentAmount').value = data.current_amount;
         if(document.getElementById('alertThreshold')) document.getElementById('alertThreshold').value = data.alert_threshold;
         if(document.getElementById('monthlyGoal')) document.getElementById('monthlyGoal').value = data.monthly_goal;
 
-        // =========================================================
         // 3. UPDATE STATUS MESSAGES
-        // =========================================================
         const alertEl = document.getElementById('fund-alert-msg');
         const goalEl = document.getElementById('fund-goal-msg');
 
         if (alertEl && goalEl) {
-            // Status Check
             if (data.current_amount < data.alert_threshold) {
                 alertEl.innerText = `⚠️ Alert: Your fund is BELOW the safety threshold of ₹${data.alert_threshold.toLocaleString()}!`;
                 alertEl.style.color = '#ff5252'; 
@@ -721,7 +708,6 @@ async function loadAdminData() {
                 alertEl.style.color = '#4caf50'; 
             }
 
-            // Timeline Calculation
             const remaining = data.target_amount - data.current_amount;
             if (remaining <= 0) {
                 goalEl.innerText = "🎉 Congratulations! You have reached your target goal!";
@@ -751,11 +737,14 @@ async function loadAdminData() {
     }
 
     // ==========================================
-    // UPDATED: LOAD ANALYSIS FUNCTION
+    // UPDATED: LOAD ANALYSIS FUNCTION (Fixes Date Sync)
     // ==========================================
       async function loadAnalysis() {
         if (!currentToken) return;
-        const m = new Date().toISOString().slice(0, 7);
+        
+        // 1. GET MONTH FROM PICKER (Fallback to current month if missing)
+        const picker = document.getElementById('dashboardMonthInput');
+        const m = picker ? picker.value : new Date().toISOString().slice(0, 7);
         
         try {
             const [dashRes, trendRes] = await Promise.all([
@@ -778,7 +767,6 @@ async function loadAdminData() {
             const catContainer = document.getElementById('categoryAnalysis');
             if (catContainer) {
                 if (d.category_expenses && d.category_expenses.length > 0) {
-                    // FIXED XSS HERE
                     catContainer.innerHTML = d.category_expenses.map(c => `
                         <div style="margin-bottom: 12px;">
                             <div style="display:flex; justify-content:space-between; font-size:0.9rem; margin-bottom:4px;">
@@ -791,11 +779,11 @@ async function loadAdminData() {
                         </div>
                     `).join('');
                 } else {
-                    catContainer.innerHTML = '<p style="opacity:0.6; text-align:center;">No expenses this month.</p>';
+                    catContainer.innerHTML = '<p style="opacity:0.6; text-align:center;">No expenses found for this month.</p>';
                 }
             }
 
-            // 3. Populate Trend Analysis (List view of last 6 months)
+            // 3. Populate Trend Analysis (List view)
             const trendContainer = document.getElementById('trendAnalysis');
             if (trendContainer) {
                 const recentTrend = t.slice(0, 6); 
@@ -817,11 +805,145 @@ async function loadAdminData() {
     }
 
     // ==========================================
-    // CALENDAR (ENHANCED DROPDOWN)
+    // NEW: OVERALL SUMMARY (LIFETIME)
+    // ==========================================
+    async function loadOverallSummary() {
+        if (!currentToken) return;
+
+        try {
+            const res = await fetch(`${CONFIG.API_BASE}/analytics/overall`, {
+                headers: { 'Authorization': `Bearer ${currentToken}` }
+            });
+            const data = await res.json();
+
+            if (!res.ok) throw new Error(data.error || 'Failed to load');
+
+            // 1. Update Header Cards
+            document.getElementById('lifeIncome').innerText = `₹${formatCompactNumber(data.total_income)}`;
+            document.getElementById('lifeExpense').innerText = `₹${formatCompactNumber(data.total_expenses)}`;
+            document.getElementById('lifeSavings').innerText = `₹${formatCompactNumber(data.net_savings)}`;
+
+            // 2. Render Charts
+            renderOverallCharts(data.trend, data.categories);
+
+            // 3. Render Date Comparison
+            const c = data.comparison;
+            document.getElementById('compPrevLabel').innerText = c.prev_date_label;
+            document.getElementById('compCurrLabel').innerText = c.current_date_label;
+            document.getElementById('compPrevVal').innerText = `₹${formatCompactNumber(c.prev_month_val)}`;
+            document.getElementById('compCurrVal').innerText = `₹${formatCompactNumber(c.this_month_val)}`;
+
+            const diff = c.this_month_val - c.prev_month_val;
+            const insightEl = document.getElementById('compInsight');
+            
+            if (diff > 0) {
+                insightEl.innerHTML = `<i class="ri-arrow-up-line" style="color: var(--danger)"></i> You have spent <strong>₹${formatCompactNumber(diff)} more</strong> than this time last month.`;
+                insightEl.style.color = "#ff6b6b";
+            } else {
+                insightEl.innerHTML = `<i class="ri-arrow-down-line" style="color: var(--success)"></i> Great! You saved <strong>₹${formatCompactNumber(Math.abs(diff))}</strong> compared to last month.`;
+                insightEl.style.color = "#2ecc71";
+            }
+
+            // 4. Render Category List (Google Pay Style)
+            const list = document.getElementById('overallCategoryList');
+            if (list) {
+                list.innerHTML = data.categories.slice(0, 5).map(cat => `
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div style="width: 32px; height: 32px; background: rgba(255,255,255,0.05); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary);">
+                                    <i class="${getCategoryIcon(cat.category, currentUserType)}"></i>
+                                </div>
+                                <span style="font-size: 0.95rem; font-weight: 500;">${escapeHtml(getCategoryLabel(cat.category, currentUserType))}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 600;">₹${formatCompactNumber(cat.amount)}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">${cat.percentage}%</div>
+                            </div>
+                        </div>
+                        <div style="height: 6px; width: 100%; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${cat.percentage}%; background: ${getColorForCategory(cat.category)}; border-radius: 3px;"></div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+        } catch (error) {
+            console.error(error);
+            showNotification('Failed to load overall summary', 'danger');
+        }
+    }
+
+    function renderOverallCharts(trendData, categoryData) {
+        const isLight = document.body.classList.contains('light-mode');
+        const gridColor = isLight ? '#E5E7EB' : '#27272a';
+
+        // 1. Trend Chart (Line)
+        if (overallTrendInstance) { overallTrendInstance.destroy(); }
+        const ctxTrend = document.getElementById('overallTrendChart');
+        if (ctxTrend) {
+            overallTrendInstance = new Chart(ctxTrend, {
+                type: 'line',
+                data: {
+                    labels: trendData.map(t => t.month),
+                    datasets: [{
+                        label: 'Total Spent',
+                        data: trendData.map(t => t.amount),
+                        borderColor: '#d946ef', 
+                        backgroundColor: 'rgba(217, 70, 239, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#d946ef',
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#6b7280' } },
+                        y: { grid: { color: gridColor }, ticks: { color: '#6b7280', callback: (val) => formatCompactNumber(val) } }
+                    }
+                }
+            });
+        }
+
+        // 2. Pie Chart
+        if (overallPieInstance) { overallPieInstance.destroy(); }
+        const ctxPie = document.getElementById('overallPieChart');
+        if (ctxPie) {
+            overallPieInstance = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: categoryData.map(c => c.category),
+                    datasets: [{
+                        data: categoryData.map(c => c.amount),
+                        backgroundColor: ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#8b5cf6'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+    }
+
+    function getColorForCategory(cat) {
+        const colors = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#8b5cf6'];
+        return colors[cat.length % colors.length];
+    }
+
+    // ==========================================
+    // CALENDAR
     // ==========================================
     let calendarExpenses = [];
 
-    // Exported for onclick
     window.openCalendarModal = async function() {
         const modal = document.getElementById('calendarModal');
         if(modal) {
@@ -834,7 +956,6 @@ async function loadAdminData() {
         }
     };
 
-    // Exported for onclick
     window.closeCalendarModal = function() {
         const modal = document.getElementById('calendarModal');
         if(modal) modal.style.display = 'none';
@@ -850,7 +971,6 @@ async function loadAdminData() {
         } catch (e) { console.error(e); }
     }
 
-    // Exported for onchange in HTML
     window.renderCalendar = function() {
         const month = parseInt(document.getElementById('calendarMonth').value);
         const year = parseInt(document.getElementById('calendarYear').value);
@@ -928,7 +1048,6 @@ async function loadAdminData() {
                 const item = document.createElement('div');
                 const timeOrDesc = exp.description || 'Expense'; 
                 
-                // FIXED XSS HERE
                 item.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="display: flex; align-items: center; gap: 12px;">
@@ -962,7 +1081,6 @@ async function loadAdminData() {
     // AUTH & ACCOUNT
     // ==========================================
     
-    // Helper function for password validation
     function isValidPassword(p) {
         if (p.length < 8) return { valid: false, msg: 'Password must be at least 8 characters long' };
         if (!/[A-Z]/.test(p)) return { valid: false, msg: 'Password must contain at least one uppercase letter (A-Z)' };
@@ -1000,7 +1118,6 @@ async function loadAdminData() {
         const p = document.getElementById('regPassword').value;
         const t = document.getElementById('userType').value;
         
-        // Password Validation (Frontend)
         const check = isValidPassword(p);
         if (!check.valid) {
             showNotification(check.msg, 'warning');
@@ -1017,23 +1134,19 @@ async function loadAdminData() {
         } catch(err) { showNotification('Error', 'danger'); }
     }
 
-    // Exported for onclick
-    // FIX: Hard Logout to clear memory and prevent Ghost Dashboard
     window.handleLogout = function() {
         if(confirm("Are you sure you want to logout?")) {
             localStorage.clear();
             showNotification('Logged out successfully', 'success');
             setTimeout(() => {
-                window.location.href = '/'; // Hard Refresh
+                window.location.href = '/'; 
             }, 500);
         }
     };
 
-    // Exported for onclick
     window.openProfileModal = function() { document.getElementById('profileModal').style.display = 'block'; document.getElementById('profileUsername').value = currentUser; document.getElementById('profileEmail').value = currentEmail; };
     window.closeProfileModal = function() { document.getElementById('profileModal').style.display = 'none'; };
     
-    // Exported for onclick
     window.updateProfile = async function() {
         const u = document.getElementById('profileUsername').value;
         const e = document.getElementById('profileEmail').value;
@@ -1044,7 +1157,6 @@ async function loadAdminData() {
         showNotification('Updated', 'success'); window.closeProfileModal(); showLoggedInUI();
     };
 
-    // Exported for onclick
     window.openFeedbackModal = function() { document.getElementById('feedbackModal').style.display = 'block'; };
     window.closeFeedbackModal = function() { document.getElementById('feedbackModal').style.display = 'none'; };
     window.openSupportModal = function() { document.getElementById('supportModal').style.display = 'block'; };
@@ -1052,7 +1164,6 @@ async function loadAdminData() {
     window.openForgotPasswordModal = function() { document.getElementById('forgotPasswordModal').style.display = 'block'; };
     window.closeForgotPasswordModal = function() { document.getElementById('forgotPasswordModal').style.display = 'none'; };
 
-    // Exported for onclick
     window.requestResetLink = async function() {
         const email = document.getElementById('forgotEmail').value;
         if (!email) {
@@ -1079,7 +1190,6 @@ async function loadAdminData() {
         }
     };
 
-    // Exported for onclick
     window.changePassword = async function() {
         const current = document.getElementById('currentPassword').value;
         const newPass = document.getElementById('newPassword').value;
@@ -1088,7 +1198,6 @@ async function loadAdminData() {
             return;
         }
         
-        // Password Validation (Frontend)
         const check = isValidPassword(newPass);
         if (!check.valid) {
             showNotification(check.msg, 'warning');
@@ -1113,7 +1222,6 @@ async function loadAdminData() {
             if (res.ok) {
                 showNotification(data.message, 'success');
                 if (document.getElementById('profileForm')) {
-                    // Assuming there might be a password form ID, if not, manually clear inputs
                     document.getElementById('currentPassword').value = '';
                     document.getElementById('newPassword').value = '';
                 }
@@ -1126,9 +1234,6 @@ async function loadAdminData() {
         }
     };
     
-    // ==========================================
-   // ✅ SECURE DOWNLOAD HELPER (CORRECT BLOB HANDLING)
- 
   async function secureDownload(endpoint, filename) {
         if (!currentToken) {
             showNotification('Please login first', 'warning');
@@ -1146,19 +1251,14 @@ async function loadAdminData() {
             });
 
             if (response.ok) {
-                // Convert the response to a Blob (Binary Large Object)
                 const blob = await response.blob();
-                // Create a temporary URL for the Blob
                 const url = window.URL.createObjectURL(blob);
-                
-                // Create a hidden link element to trigger the download
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = filename;
                 document.body.appendChild(a);
                 a.click();
                 
-                // Cleanup
                 window.URL.revokeObjectURL(url);
                 a.remove();
                 showNotification('Download complete', 'success');
@@ -1172,12 +1272,9 @@ async function loadAdminData() {
         }
     }
 
-    // Exported for onclick
     window.downloadCSV = function() { secureDownload('/export/csv', 'spendwise_data.csv'); }; 
     window.downloadPDF = function() { secureDownload('/export/pdf', 'spendwise_report.pdf'); }; 
     
-    
-    // Exported for onclick
     window.submitFeedback = async function() { 
         const rating = document.querySelector('input[name="rating"]:checked')?.value || 5;
         const message = document.getElementById('feedbackMessage').value;
@@ -1196,7 +1293,6 @@ async function loadAdminData() {
     // INIT
     // ==========================================
     
-    // FIX #2: Store token in local scope, not global window object
     let localResetToken = null;
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1204,7 +1300,7 @@ async function loadAdminData() {
         const resetTokenParam = urlParams.get('reset_token');
 
         if (resetTokenParam) {
-            localResetToken = resetTokenParam; // Stored safely in closure
+            localResetToken = resetTokenParam; 
             const resetModal = document.getElementById('resetPasswordModal');
             if (resetModal) {
                 resetModal.style.display = 'block';
@@ -1213,8 +1309,6 @@ async function loadAdminData() {
             }
         }
 
-        // Updated submitNewPassword to use local variable
-       // Updated submitNewPassword to fix the "Dashboard showing" bug
         window.submitNewPassword = async function() {
             const p = document.getElementById('finalNewPassword').value;
             
@@ -1223,7 +1317,6 @@ async function loadAdminData() {
                 return;
             }
             
-            // Validation
             const check = isValidPassword(p);
             if (!check.valid) {
                 showNotification(check.msg, 'warning');
@@ -1241,17 +1334,14 @@ async function loadAdminData() {
                     showNotification('Reset Success! Please Login.', 'success'); 
                     document.getElementById('resetPasswordModal').style.display = 'none'; 
                     
-                    // 1. Clean the URL
                     const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
                     window.history.replaceState({path: newUrl}, '', newUrl);
                     localResetToken = null;
 
-                    // 2. CRITICAL FIX: Clear old session data so Dashboard doesn't show
                     localStorage.clear();
                     currentToken = null;
                     currentUser = null;
 
-                    // 3. Force showing the Login UI
                     showLoginUI(); 
                     
                 } else {
@@ -1263,10 +1353,26 @@ async function loadAdminData() {
                 showNotification('Connection error', 'danger');
             }
         };
+
         const today = new Date().toISOString().split('T')[0];
         const m = new Date().toISOString().slice(0, 7);
         const mInput = document.getElementById('dashboardMonthInput');
-        if(mInput) { mInput.value = m; mInput.addEventListener('change', () => loadDashboard(mInput.value)); }
+        
+        // Month Picker Event Listener
+        if(mInput) { 
+            mInput.value = m; 
+            mInput.addEventListener('change', () => {
+                const selectedMonth = mInput.value;
+                const activeSection = document.querySelector('.view-section.active');
+                
+                if (activeSection) {
+                    if (activeSection.id === 'dashboard') loadDashboard(selectedMonth);
+                    else if (activeSection.id === 'analysis') loadAnalysis();
+                    else if (activeSection.id === 'budget') loadBudgets();
+                }
+            });
+        }
+        
         ['date', 'incomeDate', 'recDate'].forEach(id => { const el = document.getElementById(id); if(el) el.value = today; });
 
         const loginForm = document.getElementById('loginForm');
@@ -1279,7 +1385,6 @@ async function loadAdminData() {
         const fns = [addExpense, addIncome, setBudget, setEmergencyFund];
         ids.forEach((id, i) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fns[i]); });
 
-        // Mobile Menu Logic (Ensuring it works with your new CSS)
         const menuBtn = document.getElementById('menu-toggle');
         const sidebar = document.querySelector('.sidebar');
         if (menuBtn && sidebar) {
