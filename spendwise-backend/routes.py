@@ -6,14 +6,13 @@ from reportlab.pdfgen import canvas
 from flask import Blueprint, request, jsonify, current_app
 from models import db, User, Expense, Income, Budget, RecurringExpense, EmergencyFund, Feedback
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from extensions import mail  # Import mail engine
 from flask_mail import Message
 import jwt
 import datetime
 from functools import wraps
-from threading import Thread  # <--- Add this new import
-
+from threading import Thread
 
 main = Blueprint('main', __name__)
 
@@ -138,7 +137,7 @@ def forgot_password():
         # Determine URL (Local vs Prod)
         if 'render' in request.host:
             # Update this to your ACTUAL Vercel frontend URL
-            base_url = "https://spend-wise-complete-nt0la99xb-vijays-projects-4630bcf5.vercel.app" 
+            base_url = "https://spend-wise-complete.vercel.app" 
         else:
             base_url = "http://127.0.0.1:5500/spendwise-frontend/index.html" 
             
@@ -181,17 +180,45 @@ def reset_password():
 
 @main.route('/dashboard', methods=['GET'])
 @token_required
-def get_dashboard(current_user):
-    month_str = request.args.get('month', datetime.datetime.now().strftime('%Y-%m'))
+def get_dashboard_data(current_user):
+    # 1. GET MONTH/YEAR FROM FRONTEND (Default to "Now" if missing)
+    req_month = request.args.get('month', type=int)
+    req_year = request.args.get('year', type=int)
+
+    # Handle standard YYYY-MM string input if int params not provided
+    if not req_month or not req_year:
+        month_str = request.args.get('month') 
+        if month_str and '-' in month_str:
+             req_year, req_month = map(int, month_str.split('-'))
+        else:
+             now = datetime.datetime.now()
+             req_month = now.month
+             req_year = now.year
+
+    # 2. FILTER DATABASE BY THE REQUESTED MONTH
+    expenses = Expense.query.filter_by(user_id=current_user.id).filter(
+        extract('month', Expense.date) == req_month,
+        extract('year', Expense.date) == req_year
+    ).all()
     
-    total_income = db.session.query(func.sum(Income.amount)).filter(Income.user_id == current_user.id, Income.date.like(f'{month_str}%')).scalar() or 0
-    total_expenses = db.session.query(func.sum(Expense.amount)).filter(Expense.user_id == current_user.id, Expense.date.like(f'{month_str}%')).scalar() or 0
+    incomes = Income.query.filter_by(user_id=current_user.id).filter(
+        extract('month', Income.date) == req_month,
+        extract('year', Income.date) == req_year
+    ).all()
+
+    total_income = sum(i.amount for i in incomes)
+    total_expenses = sum(e.amount for e in expenses)
     
     recent = Expense.query.filter_by(user_id=current_user.id).order_by(Expense.date.desc()).limit(5).all()
     recent_data = [{'id': e.id, 'category': e.category, 'amount': e.amount, 'date': e.date, 'description': e.description} for e in recent]
     
-    cat_query = db.session.query(Expense.category, func.sum(Expense.amount)).filter(Expense.user_id == current_user.id, Expense.date.like(f'{month_str}%')).group_by(Expense.category).all()
-    category_data = [{'category': c[0], 'amount': c[1], 'percentage': round((c[1]/total_expenses*100),1)} for c in cat_query] if total_expenses > 0 else []
+    # Category Breakdown for this month
+    cat_map = {}
+    for e in expenses:
+        if e.category not in cat_map: cat_map[e.category] = 0
+        cat_map[e.category] += e.amount
+    
+    category_data = [{'category': k, 'amount': v, 'percentage': round((v/total_expenses*100),1)} for k,v in cat_map.items()] if total_expenses > 0 else []
 
     return jsonify({
         'total_income': total_income,
@@ -399,6 +426,7 @@ def admin_users(current_user):
 def admin_feedback(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
     return jsonify([{'user': f.user_username, 'rating': f.rating, 'message': f.message, 'date': f.date.strftime('%Y-%m-%d')} for f in Feedback.query.order_by(Feedback.date.desc()).limit(20).all()])
+
 # ==========================================
 # EXPORT DATA (CSV & PDF)
 # ==========================================
@@ -444,11 +472,10 @@ def export_data(current_user, format_type):
     except Exception as e:
         print(e)
         return jsonify({'error': 'Export failed'}), 500
-    # ==========================================
-# INSERT THIS NEW ROUTE AT THE BOTTOM OF routes.py
-# (Before the file ends)
-# ==========================================
 
+# ==========================================
+# 8. NEW: OVERALL ANALYTICS (LIFETIME)
+# ==========================================
 @main.route('/analytics/overall', methods=['GET'])
 @token_required
 def get_overall_analytics(current_user):
@@ -472,36 +499,30 @@ def get_overall_analytics(current_user):
             })
 
         # 3. DATE COMPARISON (Same Day This Month vs Last Month)
-        # Example: Jan 10th vs Dec 10th
         today = datetime.date.today()
         first_day_this_month = today.replace(day=1)
         
-        # Calculate Previous Month Date
         last_month_date = first_day_this_month - datetime.timedelta(days=1)
         first_day_prev_month = last_month_date.replace(day=1)
         
-        # Target date in previous month (handle edge cases like March 30 -> Feb 28)
         try:
             target_prev_date = last_month_date.replace(day=today.day)
         except ValueError:
-            target_prev_date = last_month_date # Fallback to end of month
+            target_prev_date = last_month_date 
             
-        # Sum Expenses: Start of This Month -> Today
         this_month_spend = db.session.query(func.sum(Expense.amount)).filter(
             Expense.user_id == current_user.id,
             Expense.date >= str(first_day_this_month),
             Expense.date <= str(today)
         ).scalar() or 0
         
-        # Sum Expenses: Start of Prev Month -> Same Day Prev Month
         prev_month_spend = db.session.query(func.sum(Expense.amount)).filter(
             Expense.user_id == current_user.id,
             Expense.date >= str(first_day_prev_month),
             Expense.date <= str(target_prev_date)
         ).scalar() or 0
 
-        # 4. TREND DATA (ALL TIME GROUPED BY MONTH)
-        # Get last 12 months for cleanliness, or all time if you prefer
+        # 4. TREND DATA (ALL TIME)
         trend_query = db.session.query(
             func.substr(Expense.date, 1, 7).label('month'), 
             func.sum(Expense.amount)
