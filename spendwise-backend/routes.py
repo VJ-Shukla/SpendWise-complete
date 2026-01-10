@@ -444,3 +444,85 @@ def export_data(current_user, format_type):
     except Exception as e:
         print(e)
         return jsonify({'error': 'Export failed'}), 500
+    # ==========================================
+# INSERT THIS NEW ROUTE AT THE BOTTOM OF routes.py
+# (Before the file ends)
+# ==========================================
+
+@main.route('/analytics/overall', methods=['GET'])
+@token_required
+def get_overall_analytics(current_user):
+    try:
+        # 1. LIFETIME TOTALS
+        total_income = db.session.query(func.sum(Income.amount)).filter_by(user_id=current_user.id).scalar() or 0
+        total_expenses = db.session.query(func.sum(Expense.amount)).filter_by(user_id=current_user.id).scalar() or 0
+        
+        # 2. CATEGORY BREAKDOWN (ALL TIME)
+        cat_query = db.session.query(
+            Expense.category, 
+            func.sum(Expense.amount)
+        ).filter_by(user_id=current_user.id).group_by(Expense.category).order_by(func.sum(Expense.amount).desc()).all()
+        
+        category_data = []
+        for c in cat_query:
+            category_data.append({
+                'category': c[0], 
+                'amount': c[1],
+                'percentage': round((c[1] / total_expenses * 100), 1) if total_expenses > 0 else 0
+            })
+
+        # 3. DATE COMPARISON (Same Day This Month vs Last Month)
+        # Example: Jan 10th vs Dec 10th
+        today = datetime.date.today()
+        first_day_this_month = today.replace(day=1)
+        
+        # Calculate Previous Month Date
+        last_month_date = first_day_this_month - datetime.timedelta(days=1)
+        first_day_prev_month = last_month_date.replace(day=1)
+        
+        # Target date in previous month (handle edge cases like March 30 -> Feb 28)
+        try:
+            target_prev_date = last_month_date.replace(day=today.day)
+        except ValueError:
+            target_prev_date = last_month_date # Fallback to end of month
+            
+        # Sum Expenses: Start of This Month -> Today
+        this_month_spend = db.session.query(func.sum(Expense.amount)).filter(
+            Expense.user_id == current_user.id,
+            Expense.date >= str(first_day_this_month),
+            Expense.date <= str(today)
+        ).scalar() or 0
+        
+        # Sum Expenses: Start of Prev Month -> Same Day Prev Month
+        prev_month_spend = db.session.query(func.sum(Expense.amount)).filter(
+            Expense.user_id == current_user.id,
+            Expense.date >= str(first_day_prev_month),
+            Expense.date <= str(target_prev_date)
+        ).scalar() or 0
+
+        # 4. TREND DATA (ALL TIME GROUPED BY MONTH)
+        # Get last 12 months for cleanliness, or all time if you prefer
+        trend_query = db.session.query(
+            func.substr(Expense.date, 1, 7).label('month'), 
+            func.sum(Expense.amount)
+        ).filter_by(user_id=current_user.id).group_by('month').order_by('month').all()
+        
+        trend_data = [{'month': t[0], 'amount': t[1]} for t in trend_query]
+
+        return jsonify({
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'net_savings': total_income - total_expenses,
+            'categories': category_data,
+            'comparison': {
+                'this_month_val': this_month_spend,
+                'prev_month_val': prev_month_spend,
+                'current_date_label': today.strftime("%b %d"),
+                'prev_date_label': target_prev_date.strftime("%b %d")
+            },
+            'trend': trend_data
+        })
+        
+    except Exception as e:
+        print(e)
+        return jsonify({'error': 'Analysis failed'}), 500
