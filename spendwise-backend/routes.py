@@ -1,18 +1,23 @@
 import csv
 import io
 from flask import send_file, make_response
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 from flask import Blueprint, request, jsonify, current_app
 from models import db, User, Expense, Income, Budget, RecurringExpense, EmergencyFund, Feedback
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import func
-from extensions import mail  # Import mail engine
+from sqlalchemy import func, extract
+from extensions import mail
 from flask_mail import Message
 import jwt
 import datetime
 from functools import wraps
 from threading import Thread
+
+# === NEW IMPORTS FOR PROFESSIONAL PDF TABLES ===
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
 
 main = Blueprint('main', __name__)
 
@@ -116,16 +121,14 @@ def reset_password():
         return jsonify({'error': 'Invalid token'}), 400
 
 # ==========================================
-# 3. DASHBOARD (FIXED: STRING MATCHING)
+# 3. DASHBOARD
 # ==========================================
 
 @main.route('/dashboard', methods=['GET'])
 @token_required
 def get_dashboard_data(current_user):
-    # FIX: Use string matching for dates stored as strings
     month_str = request.args.get('month', datetime.datetime.now().strftime('%Y-%m'))
     
-    # 1. Filter using LIKE (e.g., "2025-01%")
     expenses = Expense.query.filter_by(user_id=current_user.id).filter(Expense.date.like(f'{month_str}%')).all()
     incomes = Income.query.filter_by(user_id=current_user.id).filter(Income.date.like(f'{month_str}%')).all()
 
@@ -313,33 +316,126 @@ def admin_feedback(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
     return jsonify([{'user': f.user_username, 'rating': f.rating, 'message': f.message, 'date': f.date.strftime('%Y-%m-%d')} for f in Feedback.query.order_by(Feedback.date.desc()).limit(20).all()])
 
+# ==========================================
+# 6. EXPORT DATA (UPDATED: PROFESSIONAL TABLE FORMAT)
+# ==========================================
 @main.route('/export/<format_type>', methods=['GET'])
 @token_required
 def export_data(current_user, format_type):
     try:
-        incomes = Income.query.filter_by(user_id=current_user.id).all()
-        expenses = Expense.query.filter_by(user_id=current_user.id).all()
+        # 1. Fetch ALL Data
+        incomes = Income.query.filter_by(user_id=current_user.id).order_by(Income.date.desc()).all()
+        expenses = Expense.query.filter_by(user_id=current_user.id).order_by(Expense.date.desc()).all()
+        
+        # 2. Calculate Lifetime Summary
+        total_inc = sum(i.amount for i in incomes)
+        total_exp = sum(e.amount for e in expenses)
+        net_savings = total_inc - total_exp
+
+        # -------------------------------------
+        # OPTION A: CSV EXPORT
+        # -------------------------------------
         if format_type == 'csv':
-            si = io.StringIO(); cw = csv.writer(si)
-            cw.writerow(['Type', 'Category', 'Amount', 'Date'])
-            for i in incomes: cw.writerow(['Income', i.source, i.amount, i.date])
-            for e in expenses: cw.writerow(['Expense', e.category, e.amount, e.date])
-            output = make_response(si.getvalue())
-            output.headers["Content-Disposition"] = "attachment; filename=report.csv"; output.headers["Content-type"] = "text/csv"
-            return output
-        elif format_type == 'pdf':
-            buffer = io.BytesIO(); p = canvas.Canvas(buffer, pagesize=letter)
-            y = 750; p.setFont("Helvetica-Bold", 16); p.drawString(50, y, f"SpendWise Report - {current_user.username}"); y -= 30; p.setFont("Helvetica", 10)
-            p.drawString(50, y, "EXPENSES:"); y -= 20
+            si = io.StringIO()
+            cw = csv.writer(si)
+            
+            # Section 1: Overall Summary
+            cw.writerow(['--- SPENDWISE LIFETIME SUMMARY ---'])
+            cw.writerow(['Total Income', 'Total Expenses', 'Net Savings'])
+            cw.writerow([total_inc, total_exp, net_savings])
+            cw.writerow([]) # Spacer
+            
+            # Section 2: Detailed Transactions
+            cw.writerow(['--- DETAILED TRANSACTION HISTORY ---'])
+            cw.writerow(['Date', 'Type', 'Category/Source', 'Description', 'Amount'])
+            
+            # Mix and sort data by date (simple approach: just list incomes then expenses, or use pandas for sorting if needed)
+            # For simplicity in CSV, we list Incomes then Expenses
+            for i in incomes:
+                cw.writerow([i.date, 'INCOME', i.source, '-', i.amount])
             for e in expenses:
-                p.drawString(50, y, f"{e.date} | {e.category} | Rs.{e.amount}"); y -= 15
-                if y < 50: p.showPage(); y = 750
-            p.save(); buffer.seek(0)
+                cw.writerow([e.date, 'EXPENSE', e.category, e.description, e.amount])
+            
+            output = make_response(si.getvalue())
+            output.headers["Content-Disposition"] = "attachment; filename=spendwise_report.csv"
+            output.headers["Content-type"] = "text/csv"
+            return output
+
+        # -------------------------------------
+        # OPTION B: PROFESSIONAL PDF EXPORT (TABLES)
+        # -------------------------------------
+        elif format_type == 'pdf':
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            elements = []
+            styles = getSampleStyleSheet()
+
+            # 1. Title
+            title = Paragraph(f"SpendWise Financial Report - {current_user.username}", styles['Title'])
+            elements.append(title)
+            elements.append(Spacer(1, 0.2 * inch))
+
+            # 2. Summary Table
+            summary_data = [
+                ['Total Income', 'Total Expenses', 'Net Savings'],
+                [f"Rs. {total_inc}", f"Rs. {total_exp}", f"Rs. {net_savings}"]
+            ]
+            t_summary = Table(summary_data, colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
+            t_summary.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            elements.append(t_summary)
+            elements.append(Spacer(1, 0.4 * inch))
+
+            # 3. Transaction Header
+            elements.append(Paragraph("Transaction History", styles['Heading2']))
+            elements.append(Spacer(1, 0.1 * inch))
+
+            # 4. Main Data Table
+            # Prepare data: Date, Type, Category, Amount
+            table_data = [['Date', 'Type', 'Category', 'Amount']]
+            
+            # Combine & Sort Data (Python Sort)
+            all_txns = []
+            for i in incomes: all_txns.append({'date': i.date, 'type': 'Income', 'cat': i.source, 'amt': i.amount})
+            for e in expenses: all_txns.append({'date': e.date, 'type': 'Expense', 'cat': e.category, 'amt': e.amount})
+            
+            # Sort by date descending
+            all_txns.sort(key=lambda x: x['date'], reverse=True)
+
+            for t in all_txns:
+                table_data.append([t['date'], t['type'], t['cat'], f"Rs. {t['amt']}"])
+
+            # Create Table Object
+            t_main = Table(table_data, colWidths=[1.5*inch, 1.5*inch, 3*inch, 1.5*inch])
+            t_main.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]), # Alternating colors
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            
+            elements.append(t_main)
+
+            # Build PDF
+            doc.build(elements)
+            buffer.seek(0)
             return send_file(buffer, as_attachment=True, download_name='report.pdf', mimetype='application/pdf')
-    except Exception as e: print(e); return jsonify({'error': 'Export failed'}), 500
+            
+    except Exception as e:
+        print(f"Export Error: {e}")
+        return jsonify({'error': 'Export failed'}), 500
 
 # ==========================================
-# 6. NEW: OVERALL ANALYTICS (LIFETIME)
+# 7. NEW: OVERALL ANALYTICS (LIFETIME)
 # ==========================================
 @main.route('/analytics/overall', methods=['GET'])
 @token_required
