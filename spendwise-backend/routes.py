@@ -317,7 +317,7 @@ def admin_feedback(current_user):
     return jsonify([{'user': f.user_username, 'rating': f.rating, 'message': f.message, 'date': f.date.strftime('%Y-%m-%d')} for f in Feedback.query.order_by(Feedback.date.desc()).limit(20).all()])
 
 # ==========================================
-# 6. EXPORT DATA (UPDATED WITH MONTHLY BREAKDOWN)
+# 6. EXPORT DATA (UPDATED: PROFESSIONAL CSV & PDF)
 # ==========================================
 @main.route('/export/<format_type>', methods=['GET'])
 @token_required
@@ -333,7 +333,6 @@ def export_data(current_user, format_type):
         net_savings = total_inc - total_exp
 
         # 3. PREPARE MONTHLY BREAKDOWN DATA
-        # Group data by 'YYYY-MM'
         monthly_map = {}
         for i in incomes:
             m = i.date[:7] # Get "YYYY-MM"
@@ -349,33 +348,54 @@ def export_data(current_user, format_type):
         sorted_months = sorted(monthly_map.keys(), reverse=True)
 
         # -------------------------------------
-        # OPTION A: CSV EXPORT
+        # OPTION A: PROFESSIONAL CSV EXPORT
         # -------------------------------------
         if format_type == 'csv':
             si = io.StringIO()
             cw = csv.writer(si)
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             
-            # Section 1: Overall Summary
-            cw.writerow(['--- LIFETIME SUMMARY ---'])
-            cw.writerow(['Total Income', 'Total Expenses', 'Net Savings'])
-            cw.writerow([total_inc, total_exp, net_savings])
+            # A. HEADER
+            cw.writerow(['SPENDWISE FINANCIAL REPORT'])
+            cw.writerow(['User Account:', current_user.username])
+            cw.writerow(['Email:', current_user.email])
+            cw.writerow(['Generated Date:', now_str])
+            cw.writerow([]) # Spacer
+            
+            # B. EXECUTIVE SUMMARY (Vertical format for readability)
+            cw.writerow(['--- EXECUTIVE SUMMARY (LIFETIME) ---'])
+            cw.writerow(['Metric', 'Amount (INR)'])
+            cw.writerow(['Total Income', total_inc])
+            cw.writerow(['Total Expenses', total_exp])
+            cw.writerow(['Net Savings', net_savings])
+            
+            savings_rate = round((net_savings / total_inc * 100), 1) if total_inc > 0 else 0
+            cw.writerow(['Overall Savings Rate', f"{savings_rate}%"])
             cw.writerow([])
             
-            # Section 2: Monthly Breakdown (NEW)
-            cw.writerow(['--- MONTHLY BREAKDOWN ---'])
-            cw.writerow(['Month', 'Income', 'Expenses', 'Monthly Savings'])
+            # C. MONTHLY ANALYSIS (With Status)
+            cw.writerow(['--- MONTHLY ANALYSIS ---'])
+            cw.writerow(['Month', 'Total Income', 'Total Expenses', 'Net Flow', 'Status'])
             for m in sorted_months:
                 d = monthly_map[m]
-                sav = d['income'] - d['expense']
-                cw.writerow([m, d['income'], d['expense'], sav])
+                flow = d['income'] - d['expense']
+                status = "Saved" if flow >= 0 else "Overspent"
+                cw.writerow([m, d['income'], d['expense'], flow, status])
             cw.writerow([])
             
-            # Section 3: Detailed Transactions
-            cw.writerow(['--- DETAILED TRANSACTION HISTORY ---'])
-            cw.writerow(['Date', 'Type', 'Category/Source', 'Description', 'Amount'])
+            # D. DETAILED TRANSACTION LEDGER (With Payment Method)
+            cw.writerow(['--- TRANSACTION LEDGER ---'])
+            cw.writerow(['Date', 'Type', 'Category', 'Description', 'Payment Method', 'Amount'])
             
-            for i in incomes: cw.writerow([i.date, 'INCOME', i.source, '-', i.amount])
-            for e in expenses: cw.writerow([e.date, 'EXPENSE', e.category, e.description, e.amount])
+            # Combine & Sort
+            all_txns = []
+            for i in incomes: all_txns.append({'date': i.date, 'type': 'INCOME', 'cat': i.source, 'desc': '-', 'method': 'N/A', 'amt': i.amount})
+            for e in expenses: all_txns.append({'date': e.date, 'type': 'EXPENSE', 'cat': e.category, 'desc': e.description or '-', 'method': e.payment_method or 'Cash', 'amt': e.amount})
+            
+            all_txns.sort(key=lambda x: x['date'], reverse=True)
+            
+            for t in all_txns:
+                cw.writerow([t['date'], t['type'], t['cat'], t['desc'], t['method'], t['amt']])
             
             output = make_response(si.getvalue())
             output.headers["Content-Disposition"] = "attachment; filename=spendwise_report.csv"
@@ -383,7 +403,7 @@ def export_data(current_user, format_type):
             return output
 
         # -------------------------------------
-        # OPTION B: PDF EXPORT (WITH TABLES)
+        # OPTION B: PDF EXPORT (UNCHANGED)
         # -------------------------------------
         elif format_type == 'pdf':
             buffer = io.BytesIO()
@@ -413,7 +433,7 @@ def export_data(current_user, format_type):
             elements.append(t_summary)
             elements.append(Spacer(1, 0.3 * inch))
 
-            # 3. Monthly Breakdown Table (NEW)
+            # 3. Monthly Breakdown Table
             elements.append(Paragraph("Monthly Breakdown", styles['Heading2']))
             month_table_data = [['Month', 'Income', 'Expenses', 'Savings']]
             for m in sorted_months:
