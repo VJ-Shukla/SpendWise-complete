@@ -40,8 +40,6 @@
 
     let categoryChartInstance = null;
     let trendChartInstance = null;
-    
-    // NEW: Instances for Overall Summary
     let overallTrendInstance = null;
     let overallPieInstance = null;
 
@@ -494,6 +492,7 @@
                             <div class="t-meta">${escapeHtml(u.email)} • ${u.user_type}</div>
                         </div>
                         <div class="t-amount" style="font-size:0.8rem; opacity:0.6">${u.joined}</div>
+                        ${!u.is_admin ? `<button class="btn-text" style="color:#ef4444; margin-left:10px;" onclick="window.deleteUser(${u.id})"><i class="ri-delete-bin-line"></i></button>` : ''}
                     </div>
                 `).join('') || '<p style="text-align:center; padding:20px;">No users found.</p>';
             }
@@ -519,6 +518,21 @@
             console.error("Admin Load Error:", e);
         }
     }
+
+    // --- NEW: DELETE USER FUNCTION (ADMIN) ---
+    window.deleteUser = async function(id) {
+        if(confirm('WARNING: This will delete the user and ALL their data permanently. Continue?')) {
+            const res = await fetch(`${CONFIG.API_BASE}/admin/users/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${currentToken}`} });
+            
+            if(res.ok) {
+                showNotification('User Deleted', 'success');
+                loadAdminData(); // Refresh the list
+            } else {
+                const d = await res.json();
+                showNotification(d.error || 'Failed to delete', 'danger');
+            }
+        }
+    };
 
     async function loadExpenses() {
         if (!currentToken) return;
@@ -584,14 +598,28 @@
         const data = await res.json();
         const list = document.getElementById('recentIncomeList');
         if(list) {
+            // --- UPDATED: ADDED DELETE BUTTON ---
             list.innerHTML = data.map(i => `
                 <div class="transaction-item">
                     <div class="t-info"><div class="t-title">${escapeHtml(i.source)}</div><div class="t-meta">${i.date}</div></div>
                     <div class="t-amount pos">+₹${formatCompactNumber(i.amount)}</div>
+                    <button class="btn-text" style="color:#ef4444; margin-left:10px;" onclick="window.deleteIncome(${i.id})"><i class="ri-delete-bin-line"></i></button>
                 </div>
             `).join('') || '<div style="padding:20px; text-align:center; opacity:0.6;">No income records</div>';
         }
     }
+
+    // --- NEW: DELETE INCOME FUNCTION ---
+    window.deleteIncome = async function(id) {
+        if(confirm('Delete this income record?')) {
+            await fetch(`${CONFIG.API_BASE}/income/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${currentToken}`} });
+            loadRecentIncome();
+            // Also refresh dashboard if open
+            if(document.getElementById('dashboard').classList.contains('active')) loadDashboard();
+            if(document.getElementById('overall-summary').classList.contains('active')) loadOverallSummary();
+            showNotification('Income Deleted', 'success');
+        }
+    };
 
     async function loadBudgets() {
         const picker = document.getElementById('dashboardMonthInput');

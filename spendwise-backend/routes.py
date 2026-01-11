@@ -12,7 +12,7 @@ import datetime
 from functools import wraps
 from threading import Thread
 
-# === REPORTLAB IMPORTS FOR PDF ===
+# === REPORTLAB IMPORTS FOR PROFESSIONAL PDF ===
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib import colors
@@ -73,36 +73,61 @@ def register():
         return jsonify({'error': 'Email already exists'}), 400
 
     hashed_password = generate_password_hash(data.get('password'), method='pbkdf2:sha256')
-    new_user = User(username=data.get('username'), email=data.get('email'), password_hash=hashed_password, user_type=data.get('user_type', 'individual'))
+    new_user = User(
+        username=data.get('username'),
+        email=data.get('email'),
+        password_hash=hashed_password,
+        user_type=data.get('user_type', 'individual')
+    )
+    
     fund = EmergencyFund(user=new_user)
     
     db.session.add(new_user)
     db.session.add(fund)
     db.session.commit()
     
-    send_async_email("Welcome to SpendWise", new_user.email, f"Hi {new_user.username},\n\nWelcome to SpendWise! Your account has been created.")
+    send_async_email("Welcome to SpendWise", new_user.email, f"Hi {new_user.username},\n\nWelcome to SpendWise! Your account has been successfully created.")
     return jsonify({'message': 'User created successfully'}), 201
 
 @main.route('/auth/login', methods=['POST'])
 def login():
     data = request.get_json()
     user = User.query.filter_by(username=data.get('username')).first()
+    
     if not user or not check_password_hash(user.password_hash, data.get('password')):
         return jsonify({'error': 'Invalid username or password'}), 401
         
-    token = jwt.encode({'user_id': user.id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(days=7)}, current_app.config['SECRET_KEY'], algorithm="HS256")
-    return jsonify({'message': 'Login successful', 'access_token': token, 'username': user.username, 'email': user.email, 'user_type': user.user_type, 'is_admin': user.is_admin})
+    token = jwt.encode({
+        'user_id': user.id,
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    }, current_app.config['SECRET_KEY'], algorithm="HS256")
+    
+    return jsonify({
+        'message': 'Login successful',
+        'access_token': token,
+        'username': user.username,
+        'email': user.email,
+        'user_type': user.user_type,
+        'is_admin': user.is_admin
+    })
 
 @main.route('/auth/forgot-password', methods=['POST'])
 def forgot_password():
     data = request.get_json()
     email = data.get('email')
     user = User.query.filter_by(email=email).first()
+    
     if user:
-        token = jwt.encode({'user_id': user.id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=15)}, current_app.config['SECRET_KEY'], algorithm="HS256")
+        token = jwt.encode({
+            'user_id': user.id,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
+        }, current_app.config['SECRET_KEY'], algorithm="HS256")
+        
         base_url = "https://spend-wise-complete.vercel.app" if 'render' in request.host else "http://127.0.0.1:5500/spendwise-frontend/index.html"
         link = f"{base_url}?reset_token={token}"
-        send_async_email("SpendWise Password Reset", email, f"Click here to reset: {link}")
+        
+        send_async_email("SpendWise Password Reset", email, f"Hi {user.username},\n\nClick the link below to reset your password:\n{link}")
+
     return jsonify({'message': 'If registered, you will receive a reset link.'})
 
 @main.route('/auth/reset-password', methods=['POST'])
@@ -114,11 +139,12 @@ def reset_password():
         if user:
             user.password_hash = generate_password_hash(data.get('new_password'), method='pbkdf2:sha256')
             db.session.commit()
-            send_async_email("Password Changed", user.email, "Your password has been reset.")
+            
+            send_async_email("Password Changed Successfully", user.email, "Your SpendWise password has been reset successfully.")
             return jsonify({'message': 'Password reset successful'})
         return jsonify({'error': 'User not found'}), 404
     except:
-        return jsonify({'error': 'Invalid token'}), 400
+        return jsonify({'error': 'Invalid or expired token'}), 400
 
 # ==========================================
 # 3. DASHBOARD
@@ -162,25 +188,35 @@ def get_monthly_trends(current_user):
     
     data_map = {}
     all_months = set()
+    
     for i in incomes: 
-        data_map[i[0]] = {'month': i[0], 'income': i[1], 'expenses': 0}; all_months.add(i[0])
+        data_map[i[0]] = {'month': i[0], 'income': i[1], 'expenses': 0}
+        all_months.add(i[0])
+        
     for e in expenses:
         if e[0] not in data_map: data_map[e[0]] = {'month': e[0], 'income': 0, 'expenses': 0}
-        data_map[e[0]]['expenses'] = e[1]; all_months.add(e[0])
+        data_map[e[0]]['expenses'] = e[1]
+        all_months.add(e[0])
 
-    if not all_months: latest_date = datetime.date.today()
+    if not all_months:
+        latest_date = datetime.date.today()
     else:
         latest_str = sorted(list(all_months))[-1]
         latest_date = datetime.date(int(latest_str[:4]), int(latest_str[5:7]), 1)
-        if latest_date < datetime.date.today().replace(day=1): latest_date = datetime.date.today()
+        if latest_date < datetime.date.today().replace(day=1):
+            latest_date = datetime.date.today()
 
     final_result = []
-    curr_year, curr_month = latest_date.year, latest_date.month
+    curr_year = latest_date.year
+    curr_month = latest_date.month
+    
     for _ in range(12):
         key = f"{curr_year}-{curr_month:02d}"
         final_result.append(data_map.get(key, {'month': key, 'income': 0, 'expenses': 0}))
         curr_month -= 1
-        if curr_month == 0: curr_month = 12; curr_year -= 1
+        if curr_month == 0:
+            curr_month = 12
+            curr_year -= 1
 
     return jsonify(final_result[::-1])
 
@@ -216,6 +252,17 @@ def handle_income(current_user):
         return jsonify({'message': 'Income added'}), 201
     incs = Income.query.filter_by(user_id=current_user.id).order_by(Income.date.desc()).all()
     return jsonify([{'id': i.id, 'amount': i.amount, 'source': i.source, 'date': i.date} for i in incs])
+
+# --- NEW: DELETE INCOME ROUTE ---
+@main.route('/income/<int:id>', methods=['DELETE'])
+@token_required
+def delete_income(current_user, id):
+    inc = Income.query.filter_by(id=id, user_id=current_user.id).first()
+    if inc: 
+        db.session.delete(inc)
+        db.session.commit()
+        return jsonify({'message': 'Deleted'})
+    return jsonify({'error': 'Income not found'}), 404
 
 @main.route('/budget', methods=['GET', 'POST'])
 @token_required
@@ -304,11 +351,34 @@ def admin_stats(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
     return jsonify({'total_users': User.query.count(), 'total_volume': db.session.query(func.sum(Expense.amount)).scalar() or 0, 'total_feedback': Feedback.query.count()})
 
+# --- UPDATED: RETURN USER ID ---
 @main.route('/admin/users', methods=['GET'])
 @token_required
 def admin_users(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
-    return jsonify([{'username': u.username, 'email': u.email, 'user_type': u.user_type, 'joined': u.joined_at.strftime('%Y-%m-%d'), 'is_admin': u.is_admin} for u in User.query.limit(20).all()])
+    return jsonify([{'id': u.id, 'username': u.username, 'email': u.email, 'user_type': u.user_type, 'joined': u.joined_at.strftime('%Y-%m-%d'), 'is_admin': u.is_admin} for u in User.query.limit(20).all()])
+
+# --- NEW: DELETE USER ROUTE ---
+@main.route('/admin/users/<int:user_id>', methods=['DELETE'])
+@token_required
+def delete_user(current_user, user_id):
+    if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
+    
+    user_to_delete = User.query.get(user_id)
+    if user_to_delete:
+        if user_to_delete.id == current_user.id: return jsonify({'error': 'Cannot delete yourself'}), 400
+        
+        # Clean up related data first
+        Expense.query.filter_by(user_id=user_id).delete()
+        Income.query.filter_by(user_id=user_id).delete()
+        Budget.query.filter_by(user_id=user_id).delete()
+        RecurringExpense.query.filter_by(user_id=user_id).delete()
+        EmergencyFund.query.filter_by(user_id=user_id).delete()
+        
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        return jsonify({'message': 'User deleted'})
+    return jsonify({'error': 'User not found'}), 404
 
 @main.route('/admin/feedback', methods=['GET'])
 @token_required
@@ -317,7 +387,7 @@ def admin_feedback(current_user):
     return jsonify([{'user': f.user_username, 'rating': f.rating, 'message': f.message, 'date': f.date.strftime('%Y-%m-%d')} for f in Feedback.query.order_by(Feedback.date.desc()).limit(20).all()])
 
 # ==========================================
-# 6. EXPORT DATA (UPDATED: PROFESSIONAL CSV & PDF)
+# 6. EXPORT DATA (CSV & PDF WITH TABLES)
 # ==========================================
 @main.route('/export/<format_type>', methods=['GET'])
 @token_required
@@ -403,7 +473,7 @@ def export_data(current_user, format_type):
             return output
 
         # -------------------------------------
-        # OPTION B: PDF EXPORT (UNCHANGED)
+        # OPTION B: PDF EXPORT (TABLES)
         # -------------------------------------
         elif format_type == 'pdf':
             buffer = io.BytesIO()
