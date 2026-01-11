@@ -217,6 +217,17 @@ def handle_income(current_user):
     incs = Income.query.filter_by(user_id=current_user.id).order_by(Income.date.desc()).all()
     return jsonify([{'id': i.id, 'amount': i.amount, 'source': i.source, 'date': i.date} for i in incs])
 
+# --- NEW: DELETE INCOME ROUTE ---
+@main.route('/income/<int:id>', methods=['DELETE'])
+@token_required
+def delete_income(current_user, id):
+    inc = Income.query.filter_by(id=id, user_id=current_user.id).first()
+    if inc: 
+        db.session.delete(inc)
+        db.session.commit()
+        return jsonify({'message': 'Deleted'})
+    return jsonify({'error': 'Income not found'}), 404
+
 @main.route('/budget', methods=['GET', 'POST'])
 @token_required
 def handle_budget(current_user):
@@ -304,11 +315,34 @@ def admin_stats(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
     return jsonify({'total_users': User.query.count(), 'total_volume': db.session.query(func.sum(Expense.amount)).scalar() or 0, 'total_feedback': Feedback.query.count()})
 
+# --- UPDATED: RETURN USER ID ---
 @main.route('/admin/users', methods=['GET'])
 @token_required
 def admin_users(current_user):
     if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
-    return jsonify([{'username': u.username, 'email': u.email, 'user_type': u.user_type, 'joined': u.joined_at.strftime('%Y-%m-%d'), 'is_admin': u.is_admin} for u in User.query.limit(20).all()])
+    return jsonify([{'id': u.id, 'username': u.username, 'email': u.email, 'user_type': u.user_type, 'joined': u.joined_at.strftime('%Y-%m-%d'), 'is_admin': u.is_admin} for u in User.query.limit(20).all()])
+
+# --- NEW: DELETE USER ROUTE ---
+@main.route('/admin/users/<int:user_id>', methods=['DELETE'])
+@token_required
+def delete_user(current_user, user_id):
+    if not current_user.is_admin: return jsonify({'error': 'Unauthorized'}), 403
+    
+    user_to_delete = User.query.get(user_id)
+    if user_to_delete:
+        if user_to_delete.id == current_user.id: return jsonify({'error': 'Cannot delete yourself'}), 400
+        
+        # Clean up related data first
+        Expense.query.filter_by(user_id=user_id).delete()
+        Income.query.filter_by(user_id=user_id).delete()
+        Budget.query.filter_by(user_id=user_id).delete()
+        RecurringExpense.query.filter_by(user_id=user_id).delete()
+        EmergencyFund.query.filter_by(user_id=user_id).delete()
+        
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        return jsonify({'message': 'User deleted'})
+    return jsonify({'error': 'User not found'}), 404
 
 @main.route('/admin/feedback', methods=['GET'])
 @token_required
@@ -317,25 +351,22 @@ def admin_feedback(current_user):
     return jsonify([{'user': f.user_username, 'rating': f.rating, 'message': f.message, 'date': f.date.strftime('%Y-%m-%d')} for f in Feedback.query.order_by(Feedback.date.desc()).limit(20).all()])
 
 # ==========================================
-# 6. EXPORT DATA (UPDATED: PROFESSIONAL CSV & PDF)
+# 6. EXPORT DATA (CSV & PDF)
 # ==========================================
 @main.route('/export/<format_type>', methods=['GET'])
 @token_required
 def export_data(current_user, format_type):
     try:
-        # 1. Fetch ALL Data
         incomes = Income.query.filter_by(user_id=current_user.id).order_by(Income.date.desc()).all()
         expenses = Expense.query.filter_by(user_id=current_user.id).order_by(Expense.date.desc()).all()
         
-        # 2. Lifetime Totals
         total_inc = sum(i.amount for i in incomes)
         total_exp = sum(e.amount for e in expenses)
         net_savings = total_inc - total_exp
 
-        # 3. PREPARE MONTHLY BREAKDOWN DATA
         monthly_map = {}
         for i in incomes:
-            m = i.date[:7] # Get "YYYY-MM"
+            m = i.date[:7]
             if m not in monthly_map: monthly_map[m] = {'income': 0, 'expense': 0}
             monthly_map[m]['income'] += i.amount
 
@@ -344,140 +375,62 @@ def export_data(current_user, format_type):
             if m not in monthly_map: monthly_map[m] = {'income': 0, 'expense': 0}
             monthly_map[m]['expense'] += e.amount
         
-        # Sort months descending (Newest first)
         sorted_months = sorted(monthly_map.keys(), reverse=True)
 
-        # -------------------------------------
-        # OPTION A: PROFESSIONAL CSV EXPORT
-        # -------------------------------------
         if format_type == 'csv':
-            si = io.StringIO()
-            cw = csv.writer(si)
+            si = io.StringIO(); cw = csv.writer(si)
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            
-            # A. HEADER
             cw.writerow(['SPENDWISE FINANCIAL REPORT'])
-            cw.writerow(['User Account:', current_user.username])
-            cw.writerow(['Email:', current_user.email])
-            cw.writerow(['Generated Date:', now_str])
-            cw.writerow([]) # Spacer
-            
-            # B. EXECUTIVE SUMMARY (Vertical format for readability)
-            cw.writerow(['--- EXECUTIVE SUMMARY (LIFETIME) ---'])
-            cw.writerow(['Metric', 'Amount (INR)'])
-            cw.writerow(['Total Income', total_inc])
-            cw.writerow(['Total Expenses', total_exp])
-            cw.writerow(['Net Savings', net_savings])
-            
+            cw.writerow(['User Account:', current_user.username]); cw.writerow(['Email:', current_user.email]); cw.writerow(['Generated Date:', now_str]); cw.writerow([])
+            cw.writerow(['--- EXECUTIVE SUMMARY (LIFETIME) ---']); cw.writerow(['Metric', 'Amount (INR)'])
+            cw.writerow(['Total Income', total_inc]); cw.writerow(['Total Expenses', total_exp]); cw.writerow(['Net Savings', net_savings])
             savings_rate = round((net_savings / total_inc * 100), 1) if total_inc > 0 else 0
-            cw.writerow(['Overall Savings Rate', f"{savings_rate}%"])
-            cw.writerow([])
-            
-            # C. MONTHLY ANALYSIS (With Status)
-            cw.writerow(['--- MONTHLY ANALYSIS ---'])
-            cw.writerow(['Month', 'Total Income', 'Total Expenses', 'Net Flow', 'Status'])
+            cw.writerow(['Overall Savings Rate', f"{savings_rate}%"]); cw.writerow([])
+            cw.writerow(['--- MONTHLY ANALYSIS ---']); cw.writerow(['Month', 'Total Income', 'Total Expenses', 'Net Flow', 'Status'])
             for m in sorted_months:
-                d = monthly_map[m]
-                flow = d['income'] - d['expense']
-                status = "Saved" if flow >= 0 else "Overspent"
+                d = monthly_map[m]; flow = d['income'] - d['expense']; status = "Saved" if flow >= 0 else "Overspent"
                 cw.writerow([m, d['income'], d['expense'], flow, status])
             cw.writerow([])
-            
-            # D. DETAILED TRANSACTION LEDGER (With Payment Method)
-            cw.writerow(['--- TRANSACTION LEDGER ---'])
-            cw.writerow(['Date', 'Type', 'Category', 'Description', 'Payment Method', 'Amount'])
-            
-            # Combine & Sort
+            cw.writerow(['--- TRANSACTION LEDGER ---']); cw.writerow(['Date', 'Type', 'Category', 'Description', 'Payment Method', 'Amount'])
             all_txns = []
             for i in incomes: all_txns.append({'date': i.date, 'type': 'INCOME', 'cat': i.source, 'desc': '-', 'method': 'N/A', 'amt': i.amount})
             for e in expenses: all_txns.append({'date': e.date, 'type': 'EXPENSE', 'cat': e.category, 'desc': e.description or '-', 'method': e.payment_method or 'Cash', 'amt': e.amount})
-            
             all_txns.sort(key=lambda x: x['date'], reverse=True)
-            
-            for t in all_txns:
-                cw.writerow([t['date'], t['type'], t['cat'], t['desc'], t['method'], t['amt']])
+            for t in all_txns: cw.writerow([t['date'], t['type'], t['cat'], t['desc'], t['method'], t['amt']])
             
             output = make_response(si.getvalue())
-            output.headers["Content-Disposition"] = "attachment; filename=spendwise_report.csv"
-            output.headers["Content-type"] = "text/csv"
+            output.headers["Content-Disposition"] = "attachment; filename=spendwise_report.csv"; output.headers["Content-type"] = "text/csv"
             return output
 
-        # -------------------------------------
-        # OPTION B: PDF EXPORT (UNCHANGED)
-        # -------------------------------------
         elif format_type == 'pdf':
-            buffer = io.BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=letter)
-            elements = []
-            styles = getSampleStyleSheet()
-
-            # 1. Title
-            elements.append(Paragraph(f"SpendWise Report - {current_user.username}", styles['Title']))
-            elements.append(Spacer(1, 0.2 * inch))
-
-            # 2. Lifetime Summary Table
+            buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=letter); elements = []; styles = getSampleStyleSheet()
+            elements.append(Paragraph(f"SpendWise Report - {current_user.username}", styles['Title'])); elements.append(Spacer(1, 0.2 * inch))
+            
             elements.append(Paragraph("Lifetime Summary", styles['Heading2']))
-            summary_data = [
-                ['Total Income', 'Total Expenses', 'Net Savings'],
-                [f"Rs. {total_inc}", f"Rs. {total_exp}", f"Rs. {net_savings}"]
-            ]
+            summary_data = [['Total Income', 'Total Expenses', 'Net Savings'], [f"Rs. {total_inc}", f"Rs. {total_exp}", f"Rs. {net_savings}"]]
             t_summary = Table(summary_data, colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
-            t_summary.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ]))
-            elements.append(t_summary)
-            elements.append(Spacer(1, 0.3 * inch))
+            t_summary.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.grey), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke), ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('BOTTOMPADDING', (0, 0), (-1, 0), 12), ('GRID', (0, 0), (-1, -1), 1, colors.black)]))
+            elements.append(t_summary); elements.append(Spacer(1, 0.3 * inch))
 
-            # 3. Monthly Breakdown Table
             elements.append(Paragraph("Monthly Breakdown", styles['Heading2']))
             month_table_data = [['Month', 'Income', 'Expenses', 'Savings']]
             for m in sorted_months:
-                d = monthly_map[m]
-                month_table_data.append([m, f"Rs. {d['income']}", f"Rs. {d['expense']}", f"Rs. {d['income'] - d['expense']}"])
-            
+                d = monthly_map[m]; month_table_data.append([m, f"Rs. {d['income']}", f"Rs. {d['expense']}", f"Rs. {d['income'] - d['expense']}"])
             t_months = Table(month_table_data, colWidths=[2*inch, 2*inch, 2*inch, 1.5*inch])
-            t_months.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ]))
-            elements.append(t_months)
-            elements.append(Spacer(1, 0.3 * inch))
+            t_months.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen), ('TEXTCOLOR', (0, 0), (-1, 0), colors.white), ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]), ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)]))
+            elements.append(t_months); elements.append(Spacer(1, 0.3 * inch))
 
-            # 4. Detailed Transactions
             elements.append(Paragraph("Transaction History", styles['Heading2']))
-            
-            # Combine & Sort Data
             table_data = [['Date', 'Type', 'Category', 'Amount']]
             all_txns = []
             for i in incomes: all_txns.append({'date': i.date, 'type': 'Income', 'cat': i.source, 'amt': i.amount})
             for e in expenses: all_txns.append({'date': e.date, 'type': 'Expense', 'cat': e.category, 'amt': e.amount})
             all_txns.sort(key=lambda x: x['date'], reverse=True)
-
-            for t in all_txns:
-                table_data.append([t['date'], t['type'], t['cat'], f"Rs. {t['amt']}"])
-
+            for t in all_txns: table_data.append([t['date'], t['type'], t['cat'], f"Rs. {t['amt']}"])
             t_main = Table(table_data, colWidths=[1.5*inch, 1.5*inch, 3*inch, 1.5*inch])
-            t_main.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ]))
+            t_main.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.darkblue), ('TEXTCOLOR', (0, 0), (-1, 0), colors.white), ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]), ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)]))
             elements.append(t_main)
-
-            doc.build(elements)
-            buffer.seek(0)
+            doc.build(elements); buffer.seek(0)
             return send_file(buffer, as_attachment=True, download_name='report.pdf', mimetype='application/pdf')
             
     except Exception as e:
@@ -491,15 +444,12 @@ def export_data(current_user, format_type):
 @token_required
 def get_overall_analytics(current_user):
     try:
-        # Lifetime Totals
         total_income = db.session.query(func.sum(Income.amount)).filter_by(user_id=current_user.id).scalar() or 0
         total_expenses = db.session.query(func.sum(Expense.amount)).filter_by(user_id=current_user.id).scalar() or 0
         
-        # Category Breakdown
         cat_query = db.session.query(Expense.category, func.sum(Expense.amount)).filter_by(user_id=current_user.id).group_by(Expense.category).order_by(func.sum(Expense.amount).desc()).all()
         category_data = [{'category': c[0], 'amount': c[1], 'percentage': round((c[1] / total_expenses * 100), 1) if total_expenses > 0 else 0} for c in cat_query]
 
-        # Date Comparison
         today = datetime.date.today(); first_day_this_month = today.replace(day=1)
         last_month_date = first_day_this_month - datetime.timedelta(days=1); first_day_prev_month = last_month_date.replace(day=1)
         try: target_prev_date = last_month_date.replace(day=today.day)
@@ -508,7 +458,6 @@ def get_overall_analytics(current_user):
         this_month_spend = db.session.query(func.sum(Expense.amount)).filter(Expense.user_id == current_user.id, Expense.date >= str(first_day_this_month), Expense.date <= str(today)).scalar() or 0
         prev_month_spend = db.session.query(func.sum(Expense.amount)).filter(Expense.user_id == current_user.id, Expense.date >= str(first_day_prev_month), Expense.date <= str(target_prev_date)).scalar() or 0
 
-        # Trend Data
         trend_query = db.session.query(func.substr(Expense.date, 1, 7).label('month'), func.sum(Expense.amount)).filter_by(user_id=current_user.id).group_by('month').order_by('month').all()
         trend_data = [{'month': t[0], 'amount': t[1]} for t in trend_query]
 
