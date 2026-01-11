@@ -12,7 +12,7 @@ import datetime
 from functools import wraps
 from threading import Thread
 
-# === NEW IMPORTS FOR PROFESSIONAL PDF TABLES ===
+# === REPORTLAB IMPORTS FOR PDF ===
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib import colors
@@ -317,7 +317,7 @@ def admin_feedback(current_user):
     return jsonify([{'user': f.user_username, 'rating': f.rating, 'message': f.message, 'date': f.date.strftime('%Y-%m-%d')} for f in Feedback.query.order_by(Feedback.date.desc()).limit(20).all()])
 
 # ==========================================
-# 6. EXPORT DATA (UPDATED: PROFESSIONAL TABLE FORMAT)
+# 6. EXPORT DATA (UPDATED WITH MONTHLY BREAKDOWN)
 # ==========================================
 @main.route('/export/<format_type>', methods=['GET'])
 @token_required
@@ -327,10 +327,26 @@ def export_data(current_user, format_type):
         incomes = Income.query.filter_by(user_id=current_user.id).order_by(Income.date.desc()).all()
         expenses = Expense.query.filter_by(user_id=current_user.id).order_by(Expense.date.desc()).all()
         
-        # 2. Calculate Lifetime Summary
+        # 2. Lifetime Totals
         total_inc = sum(i.amount for i in incomes)
         total_exp = sum(e.amount for e in expenses)
         net_savings = total_inc - total_exp
+
+        # 3. PREPARE MONTHLY BREAKDOWN DATA
+        # Group data by 'YYYY-MM'
+        monthly_map = {}
+        for i in incomes:
+            m = i.date[:7] # Get "YYYY-MM"
+            if m not in monthly_map: monthly_map[m] = {'income': 0, 'expense': 0}
+            monthly_map[m]['income'] += i.amount
+
+        for e in expenses:
+            m = e.date[:7]
+            if m not in monthly_map: monthly_map[m] = {'income': 0, 'expense': 0}
+            monthly_map[m]['expense'] += e.amount
+        
+        # Sort months descending (Newest first)
+        sorted_months = sorted(monthly_map.keys(), reverse=True)
 
         # -------------------------------------
         # OPTION A: CSV EXPORT
@@ -340,21 +356,26 @@ def export_data(current_user, format_type):
             cw = csv.writer(si)
             
             # Section 1: Overall Summary
-            cw.writerow(['--- SPENDWISE LIFETIME SUMMARY ---'])
+            cw.writerow(['--- LIFETIME SUMMARY ---'])
             cw.writerow(['Total Income', 'Total Expenses', 'Net Savings'])
             cw.writerow([total_inc, total_exp, net_savings])
-            cw.writerow([]) # Spacer
+            cw.writerow([])
             
-            # Section 2: Detailed Transactions
+            # Section 2: Monthly Breakdown (NEW)
+            cw.writerow(['--- MONTHLY BREAKDOWN ---'])
+            cw.writerow(['Month', 'Income', 'Expenses', 'Monthly Savings'])
+            for m in sorted_months:
+                d = monthly_map[m]
+                sav = d['income'] - d['expense']
+                cw.writerow([m, d['income'], d['expense'], sav])
+            cw.writerow([])
+            
+            # Section 3: Detailed Transactions
             cw.writerow(['--- DETAILED TRANSACTION HISTORY ---'])
             cw.writerow(['Date', 'Type', 'Category/Source', 'Description', 'Amount'])
             
-            # Mix and sort data by date (simple approach: just list incomes then expenses, or use pandas for sorting if needed)
-            # For simplicity in CSV, we list Incomes then Expenses
-            for i in incomes:
-                cw.writerow([i.date, 'INCOME', i.source, '-', i.amount])
-            for e in expenses:
-                cw.writerow([e.date, 'EXPENSE', e.category, e.description, e.amount])
+            for i in incomes: cw.writerow([i.date, 'INCOME', i.source, '-', i.amount])
+            for e in expenses: cw.writerow([e.date, 'EXPENSE', e.category, e.description, e.amount])
             
             output = make_response(si.getvalue())
             output.headers["Content-Disposition"] = "attachment; filename=spendwise_report.csv"
@@ -362,7 +383,7 @@ def export_data(current_user, format_type):
             return output
 
         # -------------------------------------
-        # OPTION B: PROFESSIONAL PDF EXPORT (TABLES)
+        # OPTION B: PDF EXPORT (WITH TABLES)
         # -------------------------------------
         elif format_type == 'pdf':
             buffer = io.BytesIO()
@@ -371,11 +392,11 @@ def export_data(current_user, format_type):
             styles = getSampleStyleSheet()
 
             # 1. Title
-            title = Paragraph(f"SpendWise Financial Report - {current_user.username}", styles['Title'])
-            elements.append(title)
+            elements.append(Paragraph(f"SpendWise Report - {current_user.username}", styles['Title']))
             elements.append(Spacer(1, 0.2 * inch))
 
-            # 2. Summary Table
+            # 2. Lifetime Summary Table
+            elements.append(Paragraph("Lifetime Summary", styles['Heading2']))
             summary_data = [
                 ['Total Income', 'Total Expenses', 'Net Savings'],
                 [f"Rs. {total_inc}", f"Rs. {total_exp}", f"Rs. {net_savings}"]
@@ -387,45 +408,54 @@ def export_data(current_user, format_type):
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ]))
             elements.append(t_summary)
-            elements.append(Spacer(1, 0.4 * inch))
+            elements.append(Spacer(1, 0.3 * inch))
 
-            # 3. Transaction Header
-            elements.append(Paragraph("Transaction History", styles['Heading2']))
-            elements.append(Spacer(1, 0.1 * inch))
-
-            # 4. Main Data Table
-            # Prepare data: Date, Type, Category, Amount
-            table_data = [['Date', 'Type', 'Category', 'Amount']]
+            # 3. Monthly Breakdown Table (NEW)
+            elements.append(Paragraph("Monthly Breakdown", styles['Heading2']))
+            month_table_data = [['Month', 'Income', 'Expenses', 'Savings']]
+            for m in sorted_months:
+                d = monthly_map[m]
+                month_table_data.append([m, f"Rs. {d['income']}", f"Rs. {d['expense']}", f"Rs. {d['income'] - d['expense']}"])
             
-            # Combine & Sort Data (Python Sort)
+            t_months = Table(month_table_data, colWidths=[2*inch, 2*inch, 2*inch, 1.5*inch])
+            t_months.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(t_months)
+            elements.append(Spacer(1, 0.3 * inch))
+
+            # 4. Detailed Transactions
+            elements.append(Paragraph("Transaction History", styles['Heading2']))
+            
+            # Combine & Sort Data
+            table_data = [['Date', 'Type', 'Category', 'Amount']]
             all_txns = []
             for i in incomes: all_txns.append({'date': i.date, 'type': 'Income', 'cat': i.source, 'amt': i.amount})
             for e in expenses: all_txns.append({'date': e.date, 'type': 'Expense', 'cat': e.category, 'amt': e.amount})
-            
-            # Sort by date descending
             all_txns.sort(key=lambda x: x['date'], reverse=True)
 
             for t in all_txns:
                 table_data.append([t['date'], t['type'], t['cat'], f"Rs. {t['amt']}"])
 
-            # Create Table Object
             t_main = Table(table_data, colWidths=[1.5*inch, 1.5*inch, 3*inch, 1.5*inch])
             t_main.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]), # Alternating colors
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ]))
-            
             elements.append(t_main)
 
-            # Build PDF
             doc.build(elements)
             buffer.seek(0)
             return send_file(buffer, as_attachment=True, download_name='report.pdf', mimetype='application/pdf')
