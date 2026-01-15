@@ -23,4 +23,5 @@ class Config:
     MAIL_USE_TLS = True
     MAIL_USERNAME = os.getenv('MAIL_USERNAME')  # Loaded from .env
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  # Loaded from .env
-    MAIL_DEFAULT_SENDER = os.getenv('MAIL_USERNAME')
+    # This adds the professional name "SpendWise Team" to your emails
+    MAIL_DEFAULT_SENDER = "SpendWise Team <spendwise64@gmail.com>"
