@@ -670,247 +670,331 @@ body {
 }
 .btn-link:hover { color: var(--text-main); }
 
-/* ================== AUTH ================== */
+/* ================== MODERN AUTH (GLASSMORPHISM) ================== */
+
+/* 1. Dynamic Background Wrapper */
 .auth-wrapper {
-    height: 100vh;
+    min-height: 100vh;
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(circle at top right, #1e1b4b 0%, var(--bg-dark) 40%);
+    /* Deep, rich modern gradient background */
+    background-color: #0f172a;
+    background-image: 
+        radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+        radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+        radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+    position: relative;
+    overflow: hidden;
 }
 
-/* --- SPLIT SCREEN LAYOUT UPDATE --- */
+/* Optional: Add a subtle ambient glow behind the card */
+.auth-wrapper::before {
+    content: '';
+    position: absolute;
+    width: 120%;
+    height: 120%;
+    background: radial-gradient(circle at 50% 50%, rgba(79, 70, 229, 0.08), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* 2. Split Container (Glass Effect) */
 .split-screen-container {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    width: 100%;
-    max-width: 1300px;
-    min-height: 600px;
-    padding: 20px;
-    gap: 40px;
+    grid-template-columns: 1fr 1.2fr; /* Give hero slightly more space */
+    width: 90%;
+    max-width: 1200px;
+    min-height: 700px; /* Taller, more majestic canvas */
+    
+    /* The Master Glass Container */
+    background: rgba(30, 41, 59, 0.4); /* Semi-transparent navy */
+    backdrop-filter: blur(24px); /* heavy blur for frosted glass */
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08); /* Subtle white border */
+    border-radius: 32px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); /* Deep shadow for depth */
+    
+    overflow: hidden;
+    z-index: 1;
+    position: relative;
 }
 
+/* 3. Left Column: The Login Form */
 .auth-left-column {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    padding: 3rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(15, 23, 42, 0.3); /* Slightly darker for contrast */
 }
 
+.auth-container {
+    width: 100%;
+    max-width: 380px;
+    position: relative;
+}
+
+.auth-header { 
+    text-align: center; 
+    margin-bottom: 2rem; 
+}
+
+.brand-full-logo {
+    height: 3.5rem; /* Slightly smaller, more elegant */
+    margin-bottom: 1rem;
+    filter: drop-shadow(0 0 10px rgba(79, 70, 229, 0.3)); /* Glow effect on logo */
+}
+
+.auth-header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+}
+
+/* 4. The Active Form Card */
+.auth-box {
+    display: none;
+    animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-box.active {
+    display: block;
+}
+
+@keyframes slideUpFade {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.auth-box h2 {
+    font-family: var(--font-header);
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    color: white;
+}
+
+/* 5. Modern Inputs (Floating & Glowing) */
+.input-group {
+    position: relative;
+    margin-bottom: 1.25rem;
+}
+
+.input-group i {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 1.1rem;
+    transition: color 0.3s ease;
+    z-index: 2;
+}
+
+.input-group input, 
+.input-group select {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.6); /* Dark semi-transparent */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 14px 16px 14px 48px; /* Room for icon */
+    border-radius: 12px;
+    color: white;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.input-group input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Focus State: The "Glow" */
+.input-group input:focus,
+.input-group select:focus {
+    background: rgba(15, 23, 42, 0.9);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15); /* Soft ring */
+    outline: none;
+}
+
+.input-group input:focus + i {
+    color: var(--primary);
+}
+
+/* 6. Buttons & Actions */
+.btn-primary.full-width {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 1rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    box-shadow: 0 10px 20px -10px rgba(99, 102, 241, 0.5); /* Colored shadow */
+    margin-top: 1rem;
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-primary.full-width:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 15px 25px -10px rgba(99, 102, 241, 0.6);
+}
+
+.auth-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+}
+
+.forgot-link {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    transition: color 0.2s;
+}
+
+.forgot-link:hover { color: var(--primary); }
+
+.auth-footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.9rem;
+    color: #94a3b8;
+}
+
+.auth-footer a {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+/* 7. Right Column: The Hero Section */
 .auth-right-column {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 40px;
-    animation: fadeIn 0.8s ease;
+    padding: 4rem;
+    background: radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.1), transparent 60%);
+    position: relative;
 }
 
-/* HERO SECTION STYLES */
+/* Add a cool grid pattern overlay */
+.auth-right-column::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 30px 30px;
+    opacity: 0.3;
+    pointer-events: none;
+}
+
 .hero-content {
-    max-width: 500px;
+    position: relative;
+    z-index: 2;
 }
 
 .hero-brand {
-    font-family: var(--font-header);
-    color: var(--primary);
-    font-size: 1.1rem;
+    font-size: 0.9rem;
+    letter-spacing: 3px;
+    color: #a5b4fc;
+    margin-bottom: 1.5rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: 20px;
-    display: inline-block;
 }
 
 .hero-headline {
-    font-family: var(--font-header);
     font-size: 3.5rem;
-    font-weight: 700;
     line-height: 1.1;
-    margin-bottom: 30px;
-    background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
-    
-    /* Add the standard property here: */
+    margin-bottom: 1.5rem;
+
+    /* 1. The Gradient Color */
+    background: linear-gradient(to right, #ffffff, #94a3b8);
+
+    /* 2. Standard Property (Fixes the warning) */
     background-clip: text;
-    
-    /* Keep the vendor prefix for Chrome/Safari support */
+
+    /* 3. Vendor Prefix (Required for Chrome/Safari) */
     -webkit-background-clip: text;
-    
+
+    /* 4. Make text transparent so gradient shows through */
     -webkit-text-fill-color: transparent;
+    
+    /* 5. Add Drop Shadow */
+    filter: drop-shadow(0 2px 10px rgba(0,0,0,0.3));
 }
 
+
 .hero-divider {
-    width: 60px;
-    height: 4px;
-    background: var(--primary);
-    border-radius: 2px;
-    margin-bottom: 30px;
+    width: 80px;
+    height: 6px;
+    background: linear-gradient(90deg, var(--primary), transparent);
+    border-radius: 100px;
+    margin-bottom: 2rem;
 }
 
 .hero-description {
-    color: var(--text-muted);
-    font-size: 1.1rem;
+    font-size: 1.15rem;
     line-height: 1.7;
-    margin-bottom: 40px;
+    color: #cbd5e1;
+    margin-bottom: 3rem;
+    max-width: 90%;
 }
 
 .hero-features {
     display: flex;
-    gap: 15px;
-    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .feature-tag {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 8px 16px;
-    border-radius: 30px;
+    padding: 10px 20px;
+    border-radius: 50px;
     font-size: 0.9rem;
-    color: var(--text-main);
+    font-weight: 500;
+    color: white;
     display: flex;
     align-items: center;
     gap: 8px;
-    backdrop-filter: blur(5px);
+    transition: all 0.3s ease;
+}
+
+.feature-tag:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
 }
 
 .feature-tag i {
-    color: var(--primary);
+    color: #a5b4fc;
 }
 
-/* ORIGINAL FORM CONTAINER (Unchanged Internal Structure) */
-.auth-container {
-    width: 100%;
-    max-width: 25rem; /* Converted from 400px */
-    padding: 20px;
-}
-
-.auth-header { text-align: center; margin-bottom: 40px; }
-.auth-logo { height: 5rem; width: auto; margin-bottom: 20px; object-fit: contain; } /* Converted 80px */
-.auth-header h1 { font-family: var(--font-header); font-size: 2rem; margin-bottom: 8px; }
-.auth-header p { color: var(--text-muted); }
-
-.auth-box {
-    background: var(--bg-card);
-    padding: 32px;
-    border-radius: 24px;
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-lg);
-    display: none;
-    backdrop-filter: blur(20px);
-}
-.auth-box.active { display: block; animation: fadeIn 0.4s ease; }
-
-.auth-box h2 { text-align: center; margin-bottom: 24px; font-family: var(--font-header); }
-
-.auth-box .input-group { position: relative; }
-.auth-box .input-group i { position: absolute; left: 16px; top: 14px; color: var(--text-muted); }
-.auth-box input, .auth-box select { padding-left: 44px; }
-
-.full-width { width: 100%; margin-top: 10px; }
-.auth-footer { text-align: center; margin-top: 24px; font-size: 0.9rem; color: var(--text-muted); }
-.auth-footer a, .forgot-link { color: var(--primary); text-decoration: none; font-weight: 500; transition: color var(--transition-speed); }
-.auth-footer a:hover, .forgot-link:hover { color: var(--primary-hover); }
-.auth-actions { text-align: right; margin-bottom: 20px; font-size: 0.85rem; }
-
-/* ================== UTILS & MODALS ================== */
-.text-success { color: var(--success); }
-.text-danger { color: var(--danger); }
-.scrollable-list { max-height: 400px; overflow-y: auto; }
-.report-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color); }
-.report-row.highlight { font-weight: 700; border-bottom: none; font-size: 1.1rem; margin-top: 10px; }
-
-.progress-container { background: var(--bg-dark); height: 8px; border-radius: 4px; overflow: hidden; }
-.progress-fill { height: 100%; background: var(--primary); border-radius: 4px; transition: width 0.5s; max-width: 100%; }
-
-.modal {
-    display: none; 
-    position: fixed; 
-    z-index: 100; 
-    left: 0; 
-    top: 0; 
-    width: 100%; 
-    height: 100%;
-    background-color: rgba(0,0,0,0.7); 
-    backdrop-filter: blur(5px);
-}
-
-.modal-content {
-    background-color: var(--bg-card); 
-    margin: 5% auto; 
-    padding: 24px; 
-    border: 1px solid var(--border-color);
-    width: 90%; 
-    max-width: 450px; 
-    border-radius: 20px; 
-    position: relative; 
-    box-shadow: var(--shadow-lg);
-    max-height: 90vh; 
-    overflow-y: auto; 
-    transition: transform 0.3s ease;
-}
-.modal-content.large { max-width: 600px; } 
-
-.close-modal { 
-    position: absolute; 
-    right: 24px; 
-    top: 20px; 
-    color: var(--text-muted); 
-    font-size: 1.5rem; 
-    cursor: pointer; 
-    transition: color var(--transition-speed); 
-}
-.close-modal:hover { color: var(--text-main); }
-
-.calendar-grid { 
-    display: grid; 
-    grid-template-columns: repeat(7, 1fr); 
-    gap: 4px; 
-    margin-top: 15px; 
-}
-
-.calendar-day { 
-    aspect-ratio: 1; 
-    background: var(--bg-dark); 
-    border-radius: 6px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    cursor: pointer; 
-    position: relative;
-    border: 1px solid transparent;
-    font-size: 0.9rem; 
-    transition: background-color var(--transition-speed), border-color var(--transition-speed);
-}
-
-.calendar-day:hover { border-color: var(--border-color); background-color: rgba(255,255,255,0.05); }
-.calendar-day.has-expense::after { content: ''; width: 4px; height: 4px; background: var(--primary); border-radius: 50%; position: absolute; bottom: 4px; }
-
-/* ================== RESPONSIVE ================== */
-@media (max-width: 1200px) {
-    /* Converted 240px -> 15rem */
-    .app-wrapper { grid-template-columns: 15rem 1fr; } 
-    .right-panel { display: none; } 
-    .summary-grid { grid-template-columns: 1fr 1fr 1fr; }
-}
-
+/* Responsive Rules for Auth */
 @media (max-width: 900px) {
-    /* Stack Login on Mobile */
-    .split-screen-container { grid-template-columns: 1fr; gap: 20px; }
-    .auth-right-column { display: none; /* Hide hero on mobile to focus on login */ }
-    
-    .app-wrapper { display: block; }
-    .sidebar { 
-        position: fixed; 
-        /* Converted 260px -> 16.25rem */
-        left: -16.25rem; 
-        top: 0; 
-        bottom: 0; 
-        z-index: 50; 
-        transition: left 0.3s; 
-        width: 16.25rem; 
+    .auth-wrapper {
+        align-items: flex-start; /* Align to top on mobile */
+        padding: 20px;
+        background: #0f172a; /* Flat background on mobile for performance */
     }
-    .sidebar.open { left: 0; }
-    .mobile-menu-btn { display: block; }
-    .main-content { padding: 0 16px; }
-    .summary-grid { grid-template-columns: 1fr; }
-    .charts-grid { grid-template-columns: 1fr; }
-    .section-grid { grid-template-columns: 1fr; }
+
+    .split-screen-container {
+        grid-template-columns: 1fr; /* Stack them */
+        max-width: 100%;
+        min-height: auto;
+        border-radius: 20px;
+        margin-top: 20px;
+    }
+
+    .auth-right-column {
+        display: none; /* Hide hero on mobile */
+    }
+
+    .auth-left-column {
+        padding: 2rem;
+        border-right: none;
+        background: transparent;
+    }
 }
